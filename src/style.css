@@ -638,14 +638,15 @@ input:focus {
 }
 
 /* -------------------------------------------------------------- footer -- */
-.site-footer {
-  margin-top: 56px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+.scripture-footer {
   text-align: center;
-  font-size: 13px;
+  padding: 2rem 1rem;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  margin-top: 2rem;
 }
-.scripture {
+.scripture-footer p {
   font-family: "Fraunces", serif;
   font-style: italic;
   color: var(--text-dim);

@@ -224,13 +224,10 @@ function shell(): string {
       </div>
     </section>
 
-    <footer class="site-footer">
+    <footer class="scripture-footer">
       <a href="https://github.com/systemslibrarian/crypto-lab-jevil" target="_blank" rel="noopener">
         github.com/systemslibrarian/crypto-lab-jevil</a>
-      <p class="scripture" id="scripture-footer">
-        &ldquo;So whether you eat or drink or whatever you do, do it all for the
-        glory of God.&rdquo; &mdash; 1 Corinthians 10:31
-      </p>
+      <p>So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31</p>
     </footer>
   </main>`;
 }
