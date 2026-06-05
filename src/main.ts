@@ -115,9 +115,13 @@ function shell(): string {
       <p class="panel-intro">
         Each signature reveals <code>K</code> evaluations of <code>f</code> at
         hash-derived positions. Honest signing takes whatever the message hashes
-        to. The <span class="danger-text">grind</span> is the worst case: an
-        adversary picking messages whose positions are all <em>fresh</em>, packing
-        the ledger as fast as possible.
+        to — and often re-hits positions it has used before, so an honest signer
+        can sign well past <code>n*</code> times before nearing the cliff. The
+        <span class="danger-text">grind</span> is the <strong>adversarial worst
+        case</strong>: an attacker picks messages whose positions are all
+        <em>fresh</em>, packing the ledger as fast as possible to reach the cliff
+        in exactly <code>n*+1</code> signatures. That worst case is what
+        <code>n*</code> budgets for.
       </p>
       <div class="controls">
         <label class="ctrl-msg">Message to sign
@@ -131,6 +135,15 @@ function shell(): string {
 
     <section class="panel" id="panel-cliff">
       <div class="panel-head"><span class="panel-num" aria-hidden="true">03</span><h2>The cliff</h2></div>
+      <p class="panel-intro">
+        Below <code>D+1</code> distinct points the secret is hidden
+        <strong>information-theoretically</strong> — not merely hard to compute.
+        Infinitely many degree-<code>D</code> polynomials fit the revealed points
+        equally well, so even unlimited computing power can't tell which is
+        <code>f</code>. Reach <code>D+1</code> and exactly one polynomial remains:
+        the answer snaps from <em>impossible</em> to <em>certain</em> in a single
+        signature. That discontinuity is the cliff.
+      </p>
       <div class="meter-wrap">
         <div class="meter-labels">
           <span id="meter-label">distinct points</span>
@@ -148,7 +161,9 @@ function shell(): string {
           Gold hollow dot = the out-of-domain freebie baked into the public key.
           Red dots = points revealed by signatures. Below the cliff, several
           degree-<code>D</code> curves fit the same points — the secret is one of
-          infinitely many. At <code>D+1</code> points they collapse to one.
+          infinitely many. At <code>D+1</code> points they collapse to one. The
+          curve shapes are an illustration; the binding proof is the exact
+          coefficient match in panel 04.
         </figcaption>
       </figure>
     </section>
@@ -159,6 +174,9 @@ function shell(): string {
         The key the signer believed was private, reconstructed from public data
         alone. Recovered coefficients (left) vs. the true secret (right),
         compared row by row — live, in your browser.
+        <strong>Whoever holds <code>f</code> can now forge a valid signature on
+        any message</strong>: the recoverer has become the signer. The private
+        key is public, and the signer can never take it back.
       </p>
       <div id="recover-out"></div>
     </section>
@@ -232,11 +250,47 @@ function shell(): string {
         positions, an accumulating distinct-point ledger, and genuine
         <code>O(D&sup2;)</code> Lagrange recovery that is verified to reproduce the
         true secret exactly. The plot is a real-number <em>geometric</em>
-        illustration, and the load-bearing zk-WHIR commitment layer is
-        <strong>not</strong> implemented — so this demo shows the cliff geometry,
-        not the commitment that makes it binding on a malicious signer.
-        Full honesty in <a href="https://github.com/systemslibrarian/crypto-lab-jevil/blob/main/KNOWN-GAPS.md" target="_blank" rel="noopener"><code>KNOWN-GAPS.md</code></a>.
+        illustration.
       </p>
+      <p>
+        The load-bearing omission is the <strong>zk-WHIR polynomial
+        commitment</strong> — what makes the cliff binding on a <em>malicious</em>
+        signer. Without it, a cheating signer could quietly use a
+        higher-degree polynomial than declared, so the public points never reach
+        <code>D+1</code> and the cliff never fires — they could oversign forever.
+        The real scheme's commitment binds the degree and shuts that door; this
+        demo shows the cliff <em>geometry</em> and trusts the signer to use a
+        genuine degree-<code>D</code> key. Full honesty in
+        <a href="https://github.com/systemslibrarian/crypto-lab-jevil/blob/main/KNOWN-GAPS.md" target="_blank" rel="noopener"><code>KNOWN-GAPS.md</code></a>.
+      </p>
+    </section>
+
+    <section class="prose">
+      <details class="glossary">
+        <summary>Glossary — the jargon, briefly</summary>
+        <dl>
+          <dt>Few-time signature (FTS)</dt>
+          <dd>A signature key that is only safe to use a fixed number of times.</dd>
+          <dt>Budget <code>n*</code></dt>
+          <dd>How many signatures this key can safely produce before failing.</dd>
+          <dt>HORS</dt>
+          <dd>&ldquo;Hash to Obtain a Random Subset&rdquo; — the scheme family where each signature reveals a hash-selected subset of secret values. FORS, inside SLH-DSA / SPHINCS+, is the <em>soft</em>-failing cousin.</dd>
+          <dt>Out-of-domain (OOD) point</dt>
+          <dd>One free evaluation of <code>f</code> published in the key — the head start that fixes the cliff at <code>n*+1</code>.</dd>
+          <dt>Degree <code>D</code> &middot; coefficients</dt>
+          <dd>The secret is a polynomial <code>f</code> of degree <code>D</code>; its <code>D+1</code> coefficients <em>are</em> the private key.</dd>
+          <dt>Lagrange interpolation</dt>
+          <dd>The standard method to reconstruct the unique degree-<code>D</code> polynomial through <code>D+1</code> points — the engine of the cliff.</dd>
+          <dt>Goldilocks field</dt>
+          <dd>Arithmetic modulo the prime <code>q&#8320; = 2&#8310;&#8308; &minus; 2&#179;&#178; + 1</code>; every number here lives in it.</dd>
+          <dt>Forgery &middot; EUF-CMA</dt>
+          <dd>Producing a valid signature on a message you were never authorized to sign. Recovering <code>f</code> makes forgery trivial.</dd>
+          <dt>Post-quantum &middot; transparent</dt>
+          <dd>Secure against quantum computers (hash-based, no number theory) and requiring no trusted setup.</dd>
+          <dt>zk-WHIR commitment</dt>
+          <dd>The polynomial commitment (not built in this demo) that forces even a cheating signer to use a genuine degree-<code>D</code> key.</dd>
+        </dl>
+      </details>
     </section>
 
     <section class="prose related">
@@ -285,7 +339,10 @@ async function doGenerate() {
     </div>
     <p class="ood-line">
       Public out-of-domain freebie&nbsp; <span class="ood-pair">(z=${fmt(key.ood.x)}, f(z)=${fmt(key.ood.y)})</span>
-      &mdash; one free point on <code>f</code>, baked into the public key.
+      &mdash; one free point on <code>f</code>, baked into the public key. It is
+      not decoration: it counts as one of the <code>D+1</code> points an attacker
+      needs, the head start that makes the cliff land at exactly signature
+      <code>n*+1</code>.
     </p>
     <p class="secret-line">
       Secret: a degree-${p.D} polynomial &mdash; ${p.M} hidden coefficients over the

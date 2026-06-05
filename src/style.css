@@ -728,6 +728,36 @@ input:focus-visible {
   border-radius: 14px;
   padding: 22px 26px;
 }
+
+/* ----------------------------------------------------------- glossary -- */
+.glossary {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.glossary > summary {
+  cursor: pointer;
+  padding: 18px 24px;
+  font-family: "Fraunces", serif;
+  font-size: 20px;
+  color: var(--text-strong);
+}
+.glossary[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+.glossary dl {
+  margin: 0;
+  padding: 6px 24px 20px;
+}
+.glossary dt {
+  font-weight: 700;
+  color: var(--text-strong);
+  margin-top: 16px;
+}
+.glossary dd {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+}
 .callout-real h2 {
   border: none;
   padding: 0;
@@ -812,12 +842,12 @@ input:focus-visible {
 /* Visible keyboard focus ring on everything interactive. --text-strong is
    guaranteed to contrast with the page background in both themes, so the ring
    reads even on the red/white buttons. */
-:where(a, button, select, input, [tabindex], .table-scroll):focus-visible {
+:where(a, button, select, input, summary, [tabindex], .table-scroll):focus-visible {
   outline: 2px solid var(--text-strong);
   outline-offset: 2px;
 }
 /* Suppress the mouse-click outline; keyboard users still get :focus-visible. */
-:where(a, button, select, input, [tabindex]):focus:not(:focus-visible) {
+:where(a, button, select, input, summary, [tabindex]):focus:not(:focus-visible) {
   outline: none;
 }
 #main-content:focus {
