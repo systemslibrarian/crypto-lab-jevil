@@ -485,6 +485,110 @@ input:focus-visible {
   margin: 12px 0 0;
 }
 
+/* ----------------------------------------------- soft vs sharp chart -- */
+.cmp-figure {
+  margin: 0;
+}
+.compare {
+  width: 100%;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+}
+.cmp-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.cmp-axis {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+.cmp-tick {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.cmp-axt,
+.cmp-axl,
+.cmp-axttl,
+.cmp-safelbl,
+.cmp-clifflbl {
+  font-family: "Space Mono", monospace;
+}
+.cmp-axt,
+.cmp-axl {
+  fill: var(--text-dim);
+  font-size: 12px;
+}
+.cmp-axttl {
+  fill: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cmp-safe {
+  fill: var(--green);
+  opacity: 0.08;
+}
+.cmp-safelbl {
+  fill: var(--green);
+  font-size: 11px;
+}
+.cmp-cliff {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+.cmp-clifflbl {
+  fill: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+.cmp-soft {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+}
+.cmp-jevil {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px rgba(232, 65, 58, 0.4));
+}
+.cmp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.cmp-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.cmp-key::before {
+  content: "";
+  width: 22px;
+  border-top: 3px solid var(--text-dim);
+}
+.cmp-key-soft::before {
+  border-top-style: dashed;
+}
+.cmp-key-jevil::before {
+  border-top-color: var(--accent);
+}
+.cmp-note {
+  flex-basis: 100%;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
 /* ------------------------------------------------------------ recovery -- */
 .verdict {
   font-family: "Fraunces", serif;

@@ -16,6 +16,7 @@ import {
   type CliffStatus,
 } from "./jevil";
 import { renderPlot } from "./plot";
+import { renderCompare } from "./compare";
 
 // ---------------------------------------------------------------- state ----
 let key: JevilKey | null = null;
@@ -170,6 +171,26 @@ function shell(): string {
       <div id="ledger-out" class="ledger-out"><p class="muted">No signatures yet.</p></div>
     </section>
 
+    <section class="panel" id="panel-compare">
+      <div class="panel-head"><span class="panel-num" aria-hidden="true">06</span><h2>Soft slope vs sharp cliff</h2></div>
+      <p class="panel-intro">
+        Why the cliff matters, in one picture — at <em>your</em> chosen
+        <code>n*</code> and <code>K</code>. A HORS-family scheme (FORS in SLH-DSA)
+        leaks security <em>gradually</em>: forgery probability climbs as
+        <code>(rK/T)<sup>K</sup></code> with every signature <code>r</code>. Jevil
+        stays negligible through the budget, then falls off a vertical cliff at
+        signature <code>n*+1</code>.
+      </p>
+      <figure class="cmp-figure">
+        <div id="compare" class="compare"></div>
+        <figcaption class="cmp-legend">
+          <span class="cmp-key cmp-key-soft">soft FTS — gradual slope</span>
+          <span class="cmp-key cmp-key-jevil">Jevil — flat, then cliff</span>
+          <span class="cmp-note">Real FORS uses a far larger <code>T</code>, so its slope stays low much longer; the small demo <code>T</code> just makes the shape legible.</span>
+        </figcaption>
+      </figure>
+    </section>
+
     <section class="prose">
       <h2>Why this matters</h2>
       <p>
@@ -272,6 +293,8 @@ async function doGenerate() {
   $("#sign-hint").textContent = "";
   $("#recover-out").innerHTML = "";
   $("#panel-recover").classList.add("hidden");
+  // Soft-vs-sharp comparison depends only on the chosen params.
+  $("#compare").innerHTML = renderCompare(key.params);
   update();
 }
 
@@ -457,6 +480,13 @@ function boot() {
   $("#btn-gen").addEventListener("click", () => void doGenerate());
   $("#btn-sign").addEventListener("click", () => void doSignHonest());
   $("#btn-grind").addEventListener("click", () => void doGrind());
+  // Press Enter in the message field to sign honestly.
+  $("#msg").addEventListener("keydown", (e) => {
+    if ((e as KeyboardEvent).key === "Enter") {
+      e.preventDefault();
+      void doSignHonest();
+    }
+  });
 
   // Theme toggle: flip data-theme on <html>, persist, and keep the button's
   // emoji + aria-label in sync with the active theme. Dark is the default

@@ -70,6 +70,13 @@ spec `n*=1, K=16 → D=31`.
   the commitment). We use SHA-256 via Web Crypto as a faithful random-oracle
   stand-in, with the paper's domain-separation tags (`JV-SEED`, `JV-OOD`,
   `JV-POSN`, Table 6). No tag-padding/length-encoding details are modeled.
+- **The soft-vs-sharp chart uses the classic HORS bound.** Panel 06 plots a
+  soft few-time scheme's forgery probability as `(r·K / T)^K` after `r`
+  signatures — the standard HORS/FORS bound — against Jevil's step function
+  (negligible through `n*`, then 1 at `n*+1`). Both use the demo's live `K`/`T`.
+  Real FORS uses a far larger `T`, so its slope stays low much longer; the small
+  demo `T` only makes the curve's *shape* (gradual vs vertical) legible. The
+  `~2^-124` floor below the cliff is asserted, not drawn to scale.
 - **The plot is a real-number geometric illustration.** Over Goldilocks,
   plotting `f(g^i)` does not produce a smooth curve. So Panel 03 renders the
   cliff geometry in real-number coordinate space: the degree `D` and the
