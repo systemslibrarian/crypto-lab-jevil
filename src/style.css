@@ -89,6 +89,21 @@ a {
 a:hover {
   border-bottom-color: var(--accent);
 }
+/* Inline links inside running text must be distinguishable without relying on
+   color alone (WCAG 1.4.1) — underline them. Block-style links (cards, footer,
+   skip link, theme toggle) keep the clean look. */
+.panel-intro a,
+.note a,
+.escape-note a,
+.prose p a,
+.prose li a,
+.attribution a,
+.plot-caption a,
+.cmp-note a,
+.glossary dd a {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
 
 h1,
 h2,
@@ -434,6 +449,14 @@ input:focus-visible {
 .cliff-status.danger strong {
   color: var(--danger-emph);
 }
+.cliff-status.escaped {
+  border-color: var(--gold);
+  background: rgba(226, 177, 60, 0.12);
+  color: var(--text-strong);
+}
+.cliff-status.escaped strong {
+  color: var(--gold);
+}
 
 /* ---------------------------------------------------------------- plot -- */
 .plot {
@@ -608,6 +631,31 @@ input:focus-visible {
   color: var(--warn);
   background: var(--bg-inset);
   border: 1px solid var(--warn);
+}
+.verdict.escaped {
+  color: var(--gold);
+  background: rgba(226, 177, 60, 0.12);
+  border: 1px solid var(--gold);
+}
+.escape-note {
+  color: var(--text);
+  margin: 0 0 12px;
+  max-width: 66ch;
+}
+.malicious-line {
+  color: var(--text);
+  border-left: 2px solid var(--gold);
+  padding-left: 14px;
+}
+.coeff-table .more-row td {
+  text-align: center;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.cliff-svg .plot-note {
+  fill: var(--text-dim);
+  font-family: "Space Mono", monospace;
+  font-size: 13px;
 }
 .table-scroll {
   overflow-x: auto;

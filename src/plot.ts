@@ -109,7 +109,16 @@ export function renderPlot(st: PlotState): string {
     `<line class="axis" x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H - PAD}"/>`,
   );
 
-  if (!st.cliffReached) {
+  // High-degree real-number interpolation oscillates wildly and is slow, so
+  // above this degree we plot only the points (the dots still tell the story).
+  const drawCurves = D <= 14;
+
+  if (!drawCurves) {
+    parts.push(
+      `<text class="plot-note" x="${(W / 2).toFixed(0)}" y="${(PAD + 14).toFixed(0)}" text-anchor="middle">` +
+        `degree ${D} — curves omitted; ${revealed} of ${D + 1} points shown</text>`,
+    );
+  } else if (!st.cliffReached) {
     // BELOW THE CLIFF — draw several distinct degree-D polynomials that all pass
     // through the revealed points. Free nodes (the unrevealed slots) get random
     // values; interpolating gives a genuine alternative that fits the data.
@@ -126,22 +135,25 @@ export function renderPlot(st: PlotState): string {
     parts.push(`<path class="recovered-curve" d="${pathFor(trueNodes, D)}"/>`);
   }
 
+  // Dot radius shrinks as the points get dense (high degree).
+  const dotR = D > 60 ? 2 : D > 30 ? 3 : D > 14 ? 4 : 6;
+
   // OOD freebie: gold hollow dot (node 0), shown once revealed.
   if (revealed >= 1) {
     parts.push(
-      `<circle class="ood-dot" cx="${sx(0, D).toFixed(1)}" cy="${sy(trueY[0]).toFixed(1)}" r="7"/>`,
+      `<circle class="ood-dot" cx="${sx(0, D).toFixed(1)}" cy="${sy(trueY[0]).toFixed(1)}" r="${dotR + 1}"/>`,
     );
   }
   // Revealed signature points: red filled dots (nodes 1..revealed-1).
   for (let i = 1; i < revealed; i++) {
     parts.push(
-      `<circle class="reveal-dot" cx="${sx(i, D).toFixed(1)}" cy="${sy(trueY[i]).toFixed(1)}" r="6"/>`,
+      `<circle class="reveal-dot" cx="${sx(i, D).toFixed(1)}" cy="${sy(trueY[i]).toFixed(1)}" r="${dotR}"/>`,
     );
   }
   // Unrevealed slots: faint ticks on the axis to show how many remain.
   for (let i = revealed; i <= D; i++) {
     parts.push(
-      `<circle class="empty-slot" cx="${sx(i, D).toFixed(1)}" cy="${(H - PAD).toFixed(1)}" r="3"/>`,
+      `<circle class="empty-slot" cx="${sx(i, D).toFixed(1)}" cy="${(H - PAD).toFixed(1)}" r="${Math.min(3, dotR)}"/>`,
     );
   }
 

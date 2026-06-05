@@ -1,35 +1,26 @@
-// src/lagrange.ts — the cliff engine.
+// src/lagrange.ts — the cliff engine, generic over any Field<T>.
 //
-// This is the heart of Jevil's "catastrophic failure by design". A degree-D
-// polynomial is uniquely determined by D+1 distinct points. Below that count,
-// infinitely many degree-D polynomials fit the data and the secret coefficients
-// are information-theoretically hidden. At exactly D+1 distinct points the
-// answer snaps to a unique polynomial — and anyone holding the public points can
-// reconstruct it in O(D²) field operations (paper Theorem 1 / Theorem 2).
+// A degree-D polynomial is uniquely determined by D+1 distinct points. Below
+// that count, infinitely many degree-D polynomials fit and the secret
+// coefficients are information-theoretically hidden; at exactly D+1 distinct
+// points the answer snaps to a unique polynomial recoverable in O(D²) field
+// operations (paper Theorem 1 / Theorem 2).
 
-import { Q0, mod, mul, sub, inv } from "./field";
+import type { Field } from "./ff";
 
-export interface Point {
-  x: bigint;
-  y: bigint;
+export interface Point<T> {
+  x: T;
+  y: T;
 }
 
-/** Number of DISTINCT x-coordinates among the points. */
-export function distinctCount(points: Point[]): number {
-  const xs = new Set(points.map((p) => p.x.toString()));
-  return xs.size;
-}
-
-/**
- * Keep one point per distinct x-coordinate (first occurrence wins).
- * An honest signer may revisit a position; only DISTINCT positions advance the
- * cliff (paper §5.2–5.3), so deduplication by x is part of the faithful model.
- */
-export function dedupeByX(points: Point[]): Point[] {
+/** Keep one point per distinct x (first occurrence wins) — only distinct
+ *  positions advance the cliff (paper §5.2–5.3). Keyed by the field's canonical
+ *  string form. */
+export function dedupeByX<T>(F: Field<T>, points: Point<T>[]): Point<T>[] {
   const seen = new Set<string>();
-  const out: Point[] = [];
+  const out: Point<T>[] = [];
   for (const p of points) {
-    const key = p.x.toString();
+    const key = F.fmtFull(p.x);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(p);
@@ -37,65 +28,58 @@ export function dedupeByX(points: Point[]): Point[] {
   return out;
 }
 
+export function distinctCount<T>(F: Field<T>, points: Point<T>[]): number {
+  return new Set(points.map((p) => F.fmtFull(p.x))).size;
+}
+
 /**
- * Lagrange interpolation expanded into the monomial (coefficient) basis.
- *
- * Given exactly D+1 distinct points, returns the unique degree-D coefficient
- * vector [c0, c1, …, cD] (low-order first). Runs in O(D²) field operations — we
- * accumulate each Lagrange basis polynomial L_i(x) into the running coefficient
- * sum rather than evaluating at a single point, so the output is the actual
- * secret polynomial, not just one evaluation.
+ * Lagrange interpolation expanded into the monomial (coefficient) basis. Given
+ * exactly D+1 distinct points, returns the unique degree-D coefficient vector
+ * [c0, …, cD] (low-order first) in O(D²) field operations — the actual secret
+ * polynomial, not just one evaluation.
  *
  *   f(x) = Σ_i  y_i · Π_{j≠i} (x − x_j) / (x_i − x_j)
  */
-export function interpolateCoeffs(points: Point[]): bigint[] {
-  const pts = dedupeByX(points);
+export function interpolateCoeffs<T>(F: Field<T>, points: Point<T>[]): T[] {
+  const pts = dedupeByX(F, points);
   const n = pts.length;
   if (n === 0) return [];
 
-  // Accumulated coefficient vector for the full interpolant (degree n−1).
-  const coeffs = new Array<bigint>(n).fill(0n);
+  const coeffs: T[] = new Array(n).fill(F.zero);
 
   for (let i = 0; i < n; i++) {
-    // Build the numerator polynomial  Π_{j≠i} (x − x_j)  incrementally.
-    // `basis` holds its coefficients, low-order first. Start at the constant 1.
-    const basis: bigint[] = new Array(n).fill(0n);
-    basis[0] = 1n;
+    // numerator polynomial Π_{j≠i} (x − x_j), coefficients low-order first
+    const basis: T[] = new Array(n).fill(F.zero);
+    basis[0] = F.one;
     let degree = 0;
 
-    let denom = 1n;
+    let denom = F.one;
     for (let j = 0; j < n; j++) {
       if (j === i) continue;
       const xj = pts[j].x;
-      // Multiply basis by (x − xj). New coefficient at degree k is
-      //   b'[k] = b[k−1] − xj·b[k]   (b[k−1] from the ×x term).
-      // Walk high→low so b[k−1] is still the old value when we read it.
+      // multiply basis by (x − xj): b'[k] = b[k−1] − xj·b[k], high→low
       for (let k = degree + 1; k >= 1; k--) {
-        basis[k] = sub(basis[k - 1], mul(xj, basis[k]));
+        basis[k] = F.sub(basis[k - 1], F.mul(xj, basis[k]));
       }
-      basis[0] = sub(0n, mul(xj, basis[0]));
+      basis[0] = F.sub(F.zero, F.mul(xj, basis[0]));
       degree++;
-      denom = mul(denom, sub(pts[i].x, xj));
+      denom = F.mul(denom, F.sub(pts[i].x, xj));
     }
 
-    // Scale by y_i / denom and add into the accumulator.
-    const scale = mul(pts[i].y, inv(denom));
+    const scale = F.mul(pts[i].y, F.inv(denom));
     for (let k = 0; k <= degree; k++) {
-      coeffs[k] = mod(coeffs[k] + mul(basis[k], scale));
+      coeffs[k] = F.add(coeffs[k], F.mul(basis[k], scale));
     }
   }
 
-  return coeffs.map(mod);
+  return coeffs;
 }
 
 /** Are two coefficient vectors equal as field elements? */
-export function coeffsEqual(a: bigint[], b: bigint[]): boolean {
+export function coeffsEqual<T>(F: Field<T>, a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (mod(a[i]) !== mod(b[i])) return false;
+    if (!F.eq(a[i], b[i])) return false;
   }
   return true;
 }
-
-// Re-export so callers needn't reach into field.ts for the modulus.
-export { Q0 };

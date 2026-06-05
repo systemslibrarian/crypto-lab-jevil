@@ -5,7 +5,7 @@
 // ledger data via Lagrange interpolation — nothing here is pre-baked.
 
 import "./style.css";
-import { fmt, fmtFull, mod } from "./field";
+import { GF, GF4, type Field } from "./ff";
 import {
   keyGen,
   sign,
@@ -19,8 +19,10 @@ import { renderPlot } from "./plot";
 import { renderCompare } from "./compare";
 
 // ---------------------------------------------------------------- state ----
-let key: JevilKey | null = null;
-let ledger: Ledger | null = null;
+// Field elements are bigint (base) or bigint[4] (tower); the UI is field-
+// agnostic and reads ops/formatting off key.field, so `any` is used here.
+let key: JevilKey<any> | null = null;
+let ledger: Ledger<any> | null = null;
 let grindNonce = 0;
 
 // Serialize async handlers. Each sign/grind/generate reads the ledger, awaits a
@@ -113,15 +115,31 @@ function shell(): string {
             <option value="2">2 — Figure 1 of the paper</option>
             <option value="3" selected>3</option>
             <option value="4">4</option>
+            <option value="16">16 — security grade</option>
+          </select>
+        </label>
+        <label>Field
+          <select id="sel-field">
+            <option value="base" selected>base — Goldilocks (legible)</option>
+            <option value="tower">tower — F(q₀⁴) ≈ 2²⁵⁶ (paper)</option>
+          </select>
+        </label>
+        <label>Signer
+          <select id="sel-signer">
+            <option value="honest" selected>honest</option>
+            <option value="malicious">malicious (uncommitted)</option>
           </select>
         </label>
         <button id="btn-gen" class="btn btn-primary">Generate key</button>
       </div>
       <p class="note">
-        &#9432; <strong>Small params for visual clarity.</strong> Like RSA Forge's
-        small/large-key toggle, tiny <code>n*</code> and <code>K</code> keep the
-        point count legible. Real Jevil uses <code>K=16+</code> for ~124-bit
-        security; the cliff geometry is identical at any size.
+        &#9432; <strong>Small params for visual clarity.</strong> Tiny
+        <code>n*</code>/<code>K</code> keep the point count legible;
+        <code>K=16</code> is the real security grade. <strong>Field</strong>
+        swaps the legible 64-bit base field for the paper's degree-4 tower
+        <code>F(q₀⁴) ≈ 2²⁵⁶</code> (same cliff, bigger numbers).
+        <strong>Malicious</strong> models a signer the real scheme's zk-WHIR
+        commitment would forbid — see what its absence allows in panel 04.
       </p>
       <div id="key-out" class="key-out hidden"></div>
     </section>
@@ -337,12 +355,28 @@ function shell(): string {
 async function doGenerate() {
   const nStar = parseInt($<HTMLSelectElement>("#sel-nstar").value, 10);
   const K = parseInt($<HTMLSelectElement>("#sel-k").value, 10);
+  const F: Field<any> = $<HTMLSelectElement>("#sel-field").value === "tower" ? GF4 : GF;
+  const malicious = $<HTMLSelectElement>("#sel-signer").value === "malicious";
+  const boost = malicious ? 1 : 0;
   const seed = randomSeed();
-  key = await keyGen(nStar, K, seed);
+  key = await keyGen(F, nStar, K, seed, boost);
   ledger = new Ledger(key);
   grindNonce = 0;
 
   const p = key.params;
+  const trueDeg = p.D + boost;
+  const fieldNote = F === GF4
+    ? `the paper's tower <code>F(q&#8320;&#8308;) &approx; 2&#178;&#8309;&#8310;</code>`
+    : `the Goldilocks base field <code>q&#8320; = 2&#8310;&#8308; &minus; 2&#179;&#178; + 1</code>`;
+  const secretLine = malicious
+    ? `<p class="secret-line malicious-line">&#9888; <strong>Malicious signer.</strong>
+        The public key advertises degree <code>${p.D}</code>, but the secret is
+        actually degree <code>${trueDeg}</code> (${p.M + boost} coefficients).
+        Nothing here forces the signer to be honest — the real scheme's zk-WHIR
+        commitment does. Watch the cliff <em>fail to recover</em> in panel 04.</p>`
+    : `<p class="secret-line">Secret: a degree-${p.D} polynomial &mdash; ${p.M}
+        hidden coefficients over ${fieldNote}.</p>`;
+
   $("#key-out").classList.remove("hidden");
   $("#key-out").innerHTML = `
     <div class="kv-grid">
@@ -354,16 +388,13 @@ async function doGenerate() {
       <div class="kv danger-kv"><span>cliff fires at signature</span><code>n*+1 = ${p.nCliff}</code></div>
     </div>
     <p class="ood-line">
-      Public out-of-domain freebie&nbsp; <span class="ood-pair">(z=${fmt(key.ood.x)}, f(z)=${fmt(key.ood.y)})</span>
+      Public out-of-domain freebie&nbsp; <span class="ood-pair">(z=${key.field.fmt(key.ood.x)}, f(z)=${key.field.fmt(key.ood.y)})</span>
       &mdash; one free point on <code>f</code>, baked into the public key. It is
       not decoration: it counts as one of the <code>D+1</code> points an attacker
       needs, the head start that makes the cliff land at exactly signature
       <code>n*+1</code>.
     </p>
-    <p class="secret-line">
-      Secret: a degree-${p.D} polynomial &mdash; ${p.M} hidden coefficients over the
-      Goldilocks field <code>q&#8320; = 2&#8310;&#8308; &minus; 2&#179;&#178; + 1</code>.
-    </p>`;
+    ${secretLine}`;
 
   $("#sign-hint").textContent = "";
   $("#recover-out").innerHTML = "";
@@ -402,7 +433,7 @@ async function doGrind() {
   update();
 }
 
-function reportSign(fresh: number, before: number, after: CliffStatus, label: string) {
+function reportSign(fresh: number, before: number, after: CliffStatus<any>, label: string) {
   const remaining = Math.max(0, after.needed - after.distinct);
   const tail = after.reached
     ? `&mdash; <strong class="danger-text">cliff reached: ${after.distinct} &ge; ${after.needed}.</strong>`
@@ -431,20 +462,32 @@ function update() {
   // Honest signing can push distinct past needed; clamp so valuenow stays a
   // valid progressbar value within [valuemin, valuemax].
   meter.setAttribute("aria-valuenow", String(Math.min(cliff.distinct, cliff.needed)));
+  const escaped = cliff.reached && key.degreeBoost > 0;
   meter.setAttribute(
     "aria-valuetext",
     `${cliff.distinct} of ${cliff.needed} distinct points` +
-      (cliff.reached ? " — cliff reached, secret recovered" : ""),
+      (cliff.reached
+        ? escaped
+          ? " — cliff reached, but the malicious key escaped"
+          : " — cliff reached, secret recovered"
+        : ""),
   );
 
-  // Disable the grind once the cliff has fired (the secret is already public).
+  // Disable the grind once the cliff has fired (the secret is already public,
+  // or — for a malicious key — has provably escaped the advertised cliff).
   const grind = $<HTMLButtonElement>("#btn-grind");
   grind.disabled = cliff.reached;
   grind.setAttribute("aria-disabled", String(cliff.reached));
 
   // Status callout.
   const status = $("#cliff-status");
-  if (cliff.reached) {
+  if (escaped) {
+    status.className = "cliff-status escaped shake";
+    status.innerHTML =
+      `&#9888; <strong>Cliff fired — but the key escaped.</strong> ${cliff.distinct} points reached ` +
+      `D+1 = ${cliff.needed}, yet the recovered degree-${key.params.D} polynomial is <em>not</em> the ` +
+      `signer's key (it is secretly degree ${key.params.D + key.degreeBoost}). The cheater oversigned and stayed hidden.`;
+  } else if (cliff.reached) {
     status.className = "cliff-status danger shake";
     status.innerHTML =
       `&#9888; <strong>Secret recovered.</strong> ${cliff.distinct} distinct points &ge; D+1 = ${cliff.needed}. ` +
@@ -475,28 +518,67 @@ function meterClass(pct: number, reached: boolean): string {
   return "safe";
 }
 
-function renderRecovery(cliff: CliffStatus) {
+const GAPS_LINK =
+  "https://github.com/systemslibrarian/crypto-lab-jevil/blob/main/KNOWN-GAPS.md";
+
+function renderRecovery(cliff: CliffStatus<any>) {
   const panel = $("#panel-recover");
   if (!cliff.reached || !cliff.recovered || !key) {
     panel.classList.add("hidden");
     return;
   }
   panel.classList.remove("hidden");
+  const F = key.field;
+  const title = $("#panel-recover h2");
+  const intro = $("#panel-recover .panel-intro");
+
+  // Malicious key: the advertised cliff fired but recovered the wrong polynomial.
+  if (key.degreeBoost > 0) {
+    title.textContent = "Signer escaped the cliff";
+    intro.classList.add("hidden");
+    const real = key.params.D + key.degreeBoost;
+    $("#recover-out").innerHTML = `
+      <div class="verdict escaped" role="status">SIGNER ESCAPED &mdash; the cliff did not recover the key.</div>
+      <p class="escape-note">At the advertised cliff (<code>D+1 = ${cliff.needed}</code> points)
+        anyone can interpolate the unique degree-<code>${key.params.D}</code> polynomial through the
+        public points — but the signer's real key is degree <code>${real}</code>, so that interpolation
+        is the <em>wrong</em> polynomial. The key stays secret, and the signer has oversigned past
+        <code>n*</code> with impunity. (It would take <code>${real + 1}</code> points to pin down the
+        real key — more than the budget yields.)</p>
+      <p class="escape-note"><strong>This is exactly what the zk-WHIR commitment prevents.</strong>
+        It binds the public key to a genuine degree-<code>${key.params.D}</code> polynomial, so a signer
+        can't smuggle in extra degree to dodge the cliff. The demo omits that commitment
+        (<a href="${GAPS_LINK}" target="_blank" rel="noopener">why</a>) precisely so you can see what its
+        absence would allow.</p>`;
+    return;
+  }
+
+  // Honest key: show the coefficient diff (capped for large M).
+  title.textContent = "Secret recovered";
+  intro.classList.remove("hidden");
   const recovered = cliff.recovered;
+  const total = key.coeffs.length;
+  const MAX_ROWS = 24;
+  const shown = Math.min(total, MAX_ROWS);
   const rows = key.coeffs
-    .map((trueC, i) => {
+    .slice(0, shown)
+    .map((trueC: any, i: number) => {
       const rec = recovered[i];
-      const match = mod(rec) === mod(trueC);
+      const match = F.eq(rec, trueC);
       return `<tr class="${match ? "match" : "mismatch"}">
         <th scope="row" class="idx">c<sub>${i}</sub></th>
-        <td class="mono">${fmtFull(rec)}</td>
+        <td class="mono">${F.fmtFull(rec)}</td>
         <td class="cmp" aria-label="${match ? "matches" : "differs"}"><span aria-hidden="true">${match ? "&#10003;" : "&#10007;"}</span></td>
-        <td class="mono">${fmtFull(trueC)}</td>
+        <td class="mono">${F.fmtFull(trueC)}</td>
       </tr>`;
     })
     .join("");
+  const moreRow =
+    total > shown
+      ? `<tr class="more-row"><td colspan="4">… and ${total - shown} more coefficients (all match)</td></tr>`
+      : "";
   const verdict = cliff.exact
-    ? `<div class="verdict exact" role="status">EXACT MATCH &mdash; all ${key.coeffs.length} coefficients reconstructed from public data.</div>`
+    ? `<div class="verdict exact" role="status">EXACT MATCH &mdash; all ${total} coefficients reconstructed from public data.</div>`
     : `<div class="verdict bad" role="status">MISMATCH &mdash; recovery did not reproduce the secret.</div>`;
   $("#recover-out").innerHTML = `
     ${verdict}
@@ -504,34 +586,35 @@ function renderRecovery(cliff: CliffStatus) {
       <table class="coeff-table">
         <caption class="sr-only">Each row compares a recovered coefficient with the true secret coefficient.</caption>
         <thead><tr><th scope="col">coeff</th><th scope="col">recovered (from public data)</th><th scope="col"><span class="sr-only">match</span></th><th scope="col">true secret</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${rows}${moreRow}</tbody>
       </table>
     </div>`;
 }
 
 function renderLedger() {
   if (!ledger || !key) return;
+  const F = key.field;
   const seen = new Set<string>();
   const out: string[] = [];
 
   // OOD freebie.
-  seen.add(key.ood.x.toString());
+  seen.add(F.fmtFull(key.ood.x));
   out.push(`
     <div class="led-group ood-group">
       <div class="led-tag">OOD freebie &middot; baked into public key</div>
       <div class="led-points">
-        <span class="led-pt ood-pt">x=${fmt(key.ood.x)} &middot; f(x)=${fmt(key.ood.y)}</span>
+        <span class="led-pt ood-pt">x=${F.fmt(key.ood.x)} &middot; f(x)=${F.fmt(key.ood.y)}</span>
       </div>
     </div>`);
 
-  ledger.signatures.forEach((s) => {
+  ledger.signatures.forEach((s: any) => {
     const pts = s.points
-      .map((p) => {
-        const k = p.x.toString();
+      .map((p: any) => {
+        const k = F.fmtFull(p.x);
         const dup = seen.has(k);
         if (!dup) seen.add(k);
         return `<span class="led-pt ${dup ? "dup" : ""}" title="position index i=${p.index}">
-          x=${fmt(p.x)} &middot; f(x)=${fmt(p.y)}${dup ? " &middot;dup" : ""}</span>`;
+          x=${F.fmt(p.x)} &middot; f(x)=${F.fmt(p.y)}${dup ? " &middot;dup" : ""}</span>`;
       })
       .join("");
     out.push(`

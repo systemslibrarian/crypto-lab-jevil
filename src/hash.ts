@@ -1,83 +1,89 @@
-// src/hash.ts — random-oracle stand-in over Web Crypto SHA-256.
+// src/hash.ts — random oracle via SHAKE256 (the paper's H_xof, Table 6).
 //
-// The Jevil paper uses SHAKE256 (the H_xof random oracle, Table 6). For the demo
-// we instantiate the random oracle with SHA-256 via the platform Web Crypto API,
-// which is a faithful random-oracle stand-in (noted in KNOWN-GAPS.md). All
-// derivations below are domain-separated with the paper's tag names.
+// SHAKE256 is an extendable-output function, so we hash `tag | inputs` once and
+// squeeze as many bytes as we need. All derivations are domain-separated with
+// the paper's tag names. Field elements are built from the squeezed bytes via
+// the active Field's `fromWords`, so this layer works over the base field or the
+// quartic tower unchanged.
 
+import { shake256 } from "@noble/hashes/sha3.js";
 import { Q0, mod } from "./field";
+import type { Field } from "./ff";
 
 // Paper tag names (Table 6), used for domain separation.
 export const TAG_SEED = "JV-SEED"; // secret polynomial coefficients
 export const TAG_OOD = "JV-OOD"; // out-of-domain freebie point
 export const TAG_POSN = "JV-POSN"; // signature position indices
+export const TAG_ROOT = "JV-ROOT"; // public per-key root hint
 
 const enc = new TextEncoder();
 
-async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
-  return new Uint8Array(digest);
-}
+// 16 bytes (128 bits) reduced mod q0 (~64 bits) keeps the modular bias negligible.
+const BYTES_PER_WORD = 16;
 
-/** Concatenate UTF-8 strings (joined by 0x1f unit separators) into bytes. */
 function packInputs(parts: string[]): Uint8Array {
   return enc.encode(parts.join("\x1f"));
 }
 
-function bytesToBig(bytes: Uint8Array): bigint {
-  let acc = 0n;
-  for (const b of bytes) acc = (acc << 8n) | BigInt(b);
-  return acc;
+/**
+ * Domain-separated XOF: squeeze `count` base-field words from
+ * SHAKE256(tag | inputs), each a 128-bit chunk reduced mod q0.
+ */
+export function xof(tag: string, inputs: string[], count: number): bigint[] {
+  const out = shake256(packInputs([tag, ...inputs]), {
+    dkLen: count * BYTES_PER_WORD,
+  });
+  const words: bigint[] = [];
+  for (let i = 0; i < count; i++) {
+    let acc = 0n;
+    for (let j = 0; j < BYTES_PER_WORD; j++) {
+      acc = (acc << 8n) | BigInt(out[i * BYTES_PER_WORD + j]);
+    }
+    words.push(mod(acc));
+  }
+  return words;
 }
 
-/**
- * Domain-separated extendable-output function: hash `tag | inputs | counter`
- * and reduce each 256-bit block mod Q0, producing `count` field elements.
- */
-export async function xof(
-  tag: string,
-  inputs: string[],
-  count: number,
-): Promise<bigint[]> {
-  const out: bigint[] = [];
-  for (let i = 0; i < count; i++) {
-    const block = packInputs([tag, ...inputs, `#${i}`]);
-    const digest = await sha256(block);
-    out.push(mod(bytesToBig(digest)));
-  }
-  return out;
+/** A short public hex id derived from the seed (the demo's root hint). */
+export function hashId(seed: string): string {
+  const out = shake256(packInputs([TAG_ROOT, seed]), { dkLen: 6 });
+  return Array.from(out)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /** Derive the secret polynomial's M coefficients from the seed (Construction 1). */
-export async function deriveCoeffs(seed: string, M: number): Promise<bigint[]> {
-  return xof(TAG_SEED, [seed], M);
+export function deriveCoeffs<T>(F: Field<T>, seed: string, M: number): T[] {
+  const words = xof(TAG_SEED, [seed], M * F.coords);
+  const coeffs: T[] = [];
+  for (let i = 0; i < M; i++) {
+    coeffs.push(F.fromWords(words.slice(i * F.coords, (i + 1) * F.coords)));
+  }
+  return coeffs;
 }
 
 /** Derive the out-of-domain point z (Construction 1, step 4). */
-export async function deriveOOD(rootHint: string): Promise<bigint> {
-  const [z] = await xof(TAG_OOD, [rootHint], 1);
-  return z;
+export function deriveOOD<T>(F: Field<T>, rootHint: string): T {
+  return F.fromWords(xof(TAG_OOD, [rootHint], F.coords));
 }
 
 /**
  * Derive K DISTINCT indices in {0..T−1}, sorted ascending (Construction 2,
- * step 2 — the HORS "Hash to Obtain Random Subset"). We pull field elements
- * from the XOF and reduce mod T, skipping collisions, until we have K of them.
+ * step 2 — the HORS "Hash to Obtain Random Subset").
  */
-export async function derivePositions(
+export function derivePositions(
   rootHint: string,
   message: string,
   K: number,
   T: number,
-): Promise<number[]> {
+): number[] {
   if (K > T) throw new Error("derivePositions: K cannot exceed T");
   const Tb = BigInt(T);
   const chosen = new Set<number>();
   let draw = 0;
   while (chosen.size < K) {
-    const block = await xof(TAG_POSN, [rootHint, message, `r${draw}`], 1);
-    const idx = Number(mod(block[0]) % Tb);
-    chosen.add(idx);
+    const [word] = xof(TAG_POSN, [rootHint, message, `r${draw}`], 1);
+    chosen.add(Number(mod(word) % Tb));
     draw++;
     if (draw > T * 64) throw new Error("derivePositions: exhausted draws");
   }

@@ -19,6 +19,15 @@ Failure by Design"*, Cryptology ePrint Archive Paper 2026/1103,
 - **Finite-field arithmetic** over the Goldilocks prime `q₀ = 2⁶⁴ − 2³² + 1`
   (paper §3.3). Every `add/sub/mul/pow/inv/div` is real `BigInt` modular
   arithmetic. Inversion is Fermat `a^(q₀−2)`. (`src/field.ts`)
+- **Both the base field and the real degree-4 tower.** The whole scheme runs
+  over a pluggable `Field<T>`, with two implementations: the legible 64-bit base
+  field `F_{q₀}`, and the paper's actual `F_{q₀⁴} ≈ 2²⁵⁶` quartic extension
+  (`u⁴ = 7`, the Plonky2 Goldilocks tower). The UI **Field** selector switches
+  between them; the cliff recovers exactly over both. (`src/ff.ts`)
+- **SHAKE256 random oracle.** `H_xof` is instantiated with SHAKE256 (paper
+  Table 6) via the audited `@noble/hashes`, squeezed for coefficients, the OOD
+  point, and positions, all domain-separated with the paper's tags
+  (`JV-SEED`, `JV-OOD`, `JV-POSN`). (`src/hash.ts`)
 - **The secret IS the polynomial.** The secret key is the coefficient vector of
   a random degree-`D` polynomial `f`, with `M = (n*+1)·K` coefficients,
   `D = M−1` (paper §4.1, Construction 1). (`src/jevil.ts`, `src/hash.ts`)
@@ -57,19 +66,17 @@ spec `n*=1, K=16 → D=31`.
 - **No zk-WHIR polynomial commitment — the load-bearing omission.** In the real
   scheme a polynomial commitment with degree-binding is what makes the cliff
   *binding on a malicious signer* (paper §6.1, "cap-binding"): a cheating signer
-  cannot craft a public key that escapes the cliff or that commits to a
-  higher-degree polynomial to buy extra signatures. This demo shows the cliff
-  **geometry** — the Lagrange fact about honestly-generated keys — but **not the
-  commitment that enforces it adversarially.** A demo signer is trusted to
-  actually use a degree-`D` polynomial.
-- **Base field instead of the tower.** The paper works in `F = F_{q₀⁴} ≈ 2²⁵⁶`,
-  a degree-4 extension. We use the 64-bit base field `F_{q₀}` directly so the
-  cliff stays exact and the numbers stay legible.
-- **SHA-256 instead of SHAKE256 / Poseidon2.** The paper instantiates its random
-  oracle `H_xof` with SHAKE256 (and uses an arithmetization-friendly hash inside
-  the commitment). We use SHA-256 via Web Crypto as a faithful random-oracle
-  stand-in, with the paper's domain-separation tags (`JV-SEED`, `JV-OOD`,
-  `JV-POSN`, Table 6). No tag-padding/length-encoding details are modeled.
+  cannot commit to a higher-degree polynomial to buy extra signatures. We do
+  **not** implement WHIR (a research-grade hash-based commitment). Instead the
+  **malicious-signer mode** *demonstrates what its absence allows*: select
+  "malicious" and the signer secretly uses a degree-`(D+1)` key, so at the
+  advertised cliff (`D+1` points) the interpolated degree-`D` polynomial is the
+  *wrong* one and the key stays hidden — the cheater oversigns with impunity.
+  The commitment is exactly what forbids this. (`src/jevil.ts` `degreeBoost`.)
+- **Poseidon2 inside the (absent) commitment.** The paper also uses an
+  arithmetization-friendly hash inside the commitment layer; with no commitment
+  implemented, that hash has nothing to do here. No tag-padding / length-encoding
+  details of `H_xof` are modeled either.
 - **The soft-vs-sharp chart uses the classic HORS bound.** Panel 06 plots a
   soft few-time scheme's forgery probability as `(r·K / T)^K` after `r`
   signatures — the standard HORS/FORS bound — against Jevil's step function
@@ -85,9 +92,11 @@ spec `n*=1, K=16 → D=31`.
   and the collapse to one curve at `D+1` is real — but the *values* are a
   legible illustration, not the Goldilocks field elements. The **binding**
   recovery proof (recovered `f` == true `f`) in Panel 04 uses the real field.
-- **Tiny parameters for visibility.** `n* ∈ {1,2,3,5,7}` and `K ∈ {2,3,4}` keep
-  the point count small. The paper restricts `n*` so that `n*+1` is a power of
-  two (`{1,3,7,15,…}`); we relax this for the demo. No 124-bit parameters.
+- **Default parameters are tiny for visibility.** `n* ∈ {1..7}` and
+  `K ∈ {2,3,4}` keep the point count legible; `K = 16` (the real security grade,
+  `D = 31`+) is available via the selector but makes the plot/table dense. The
+  paper restricts `n*` so that `n*+1` is a power of two (`{1,3,7,15,…}`); we
+  relax that. We don't claim a specific bit-security level for any UI choice.
 - **No signature serialization.** Real Jevil signatures are ~40 KB–500 KB
   (commitment openings); we keep evaluations as field elements in memory.
 - **No formal security machinery.** No EUF-CMA hardness argument, no
@@ -101,10 +110,12 @@ spec `n*=1, K=16 → D=31`.
 
 | File | Role |
 |------|------|
-| `src/field.ts` | Goldilocks field arithmetic (faithful) |
-| `src/lagrange.ts` | Distinct-point dedupe + `O(D²)` interpolation (faithful) |
-| `src/hash.ts` | SHA-256 random-oracle: coeffs, OOD, positions (faithful mechanic, SHA-256 stand-in) |
-| `src/jevil.ts` | KeyGen, sign, ledger, cliff check, grind attack (faithful) |
+| `src/field.ts` | Goldilocks base-field arithmetic (faithful) |
+| `src/ff.ts` | Pluggable `Field<T>`: base `F_{q₀}` + quartic tower `F_{q₀⁴}` (faithful) |
+| `src/lagrange.ts` | Distinct-point dedupe + `O(D²)` interpolation, generic over the field (faithful) |
+| `src/hash.ts` | SHAKE256 random oracle: coeffs, OOD, positions (faithful) |
+| `src/jevil.ts` | KeyGen, sign, ledger, cliff check, grind, malicious mode (faithful) |
 | `src/plot.ts` | SVG cliff plot (illustrative geometry) |
+| `src/compare.ts` | Soft-vs-sharp chart, HORS bound (illustrative) |
 | `src/main.ts` | UI wiring |
-| `scripts/core.test.ts` | Faithfulness proof (`npm test`) |
+| `scripts/core.test.ts` | Faithfulness proof over both fields (`npm test`) |

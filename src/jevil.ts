@@ -1,17 +1,23 @@
-// src/jevil.ts — the Jevil few-time signature scheme (demo realization).
+// src/jevil.ts — the Jevil few-time signature scheme, generic over Field<T>.
 //
 // Sources: Kobeissi, "Jevil", Cryptology ePrint 2026/1103. Construction 1
-// (KeyGen + OOD freebie), Construction 2 (HORS position derivation), §4.1
-// (parameters), §5.2–5.3 (the disjoint-position grind), Theorem 1/2 (the cliff).
+// (KeyGen + OOD freebie), Construction 2 (HORS positions), §4.1 (parameters),
+// §5.2–5.3 (the disjoint-position grind), Theorem 1/2 (the cliff).
 //
 // The secret key IS the coefficient vector of a degree-D polynomial f. Each
-// signature reveals K evaluations f(x_t) at hash-derived positions x_t = g^{i_t}.
-// The public key ships one free out-of-domain pair (z, f(z)). Once the DISTINCT
-// revealed points (including the OOD freebie) reach D+1, anyone can Lagrange-
-// interpolate f exactly — the cliff. This module makes that fact executable.
+// signature reveals K evaluations f(x_t) at hash-derived positions x_t = g^{i_t};
+// the public key ships one free out-of-domain pair (z, f(z)). Once the DISTINCT
+// revealed points reach D+1, anyone can Lagrange-interpolate f exactly.
+//
+// MALICIOUS MODE (degreeBoost > 0) models a signer the real scheme's zk-WHIR
+// commitment would forbid: the public key advertises degree D, but the signer
+// secretly uses degree D+boost. At the advertised cliff (D+1 points) the
+// interpolated degree-D polynomial is NOT the real key — the cheater oversigned
+// and stayed hidden. The commitment is exactly what prevents this; this demo
+// omits it (see KNOWN-GAPS.md), so we can show what its absence would allow.
 
-import { GENERATOR, pow, evalPoly, mod } from "./field";
-import { deriveCoeffs, deriveOOD, derivePositions } from "./hash";
+import type { Field } from "./ff";
+import { deriveCoeffs, deriveOOD, derivePositions, hashId } from "./hash";
 import {
   interpolateCoeffs,
   dedupeByX,
@@ -22,155 +28,146 @@ import {
 export interface Params {
   nStar: number; // signing budget chosen at KeyGen
   K: number; // positions revealed per signature
-  M: number; // number of secret coefficients = (n*+1)·K
-  D: number; // polynomial degree = M − 1
+  M: number; // advertised coefficients = (n*+1)·K
+  D: number; // advertised degree = M − 1
   T: number; // position domain size {0..T−1}
   nCliff: number; // signature at which the cliff fires = n*+1
 }
 
-export interface JevilKey {
+export interface JevilKey<T> {
   params: Params;
-  seed: string; // secret seed (would never be exposed in reality)
-  coeffs: bigint[]; // THE SECRET: degree-D polynomial coefficients
+  field: Field<T>;
+  seed: string;
+  coeffs: T[]; // THE SECRET (length M + degreeBoost)
+  degreeBoost: number; // 0 = honest; >0 = malicious higher-degree key
   rootHint: string; // public per-key identifier
-  ood: Point; // public out-of-domain freebie (z, f(z))
+  ood: Point<T>; // public out-of-domain freebie (z, f(z))
 }
 
-export interface SignedPoint extends Point {
-  index: number; // the position index i_t (x = g^{i_t})
+export interface SignedPoint<T> extends Point<T> {
+  index: number; // position index i_t (x = g^{i_t})
 }
 
-export interface Signature {
+export interface Signature<T> {
   message: string;
-  signatureNumber: number; // 1-based
-  points: SignedPoint[];
-  fresh: number; // how many of these x were new to the ledger when signed
+  signatureNumber: number;
+  points: SignedPoint<T>[];
+  fresh: number; // how many x were new to the ledger when signed
 }
 
 /** Derive scheme parameters (paper §4.1). */
 export function deriveParams(nStar: number, K: number): Params {
   const M = (nStar + 1) * K;
-  const D = M - 1;
-  // Domain comfortably larger than M so the grind has room to find disjoint
-  // sets, while honest signing still sometimes collides (duplicates that do not
-  // advance the cliff). Real parameters use a far larger T.
-  const T = 2 * M;
-  return { nStar, K, M, D, T, nCliff: nStar + 1 };
+  return { nStar, K, M, D: M - 1, T: 2 * M, nCliff: nStar + 1 };
+}
+
+/** Evaluate a polynomial at x via Horner's method (low-order coeff first). */
+export function evalPoly<T>(F: Field<T>, coeffs: T[], x: T): T {
+  let acc = F.zero;
+  for (let i = coeffs.length - 1; i >= 0; i--) {
+    acc = F.add(F.mul(acc, x), coeffs[i]);
+  }
+  return acc;
 }
 
 /** Position-to-field map psi(i) = g^i (paper Construction 2). */
-export function psi(i: number): bigint {
-  return pow(GENERATOR, BigInt(i));
+export function psi<T>(F: Field<T>, i: number): T {
+  return F.pow(F.generator, BigInt(i));
 }
 
 /** KeyGen (paper Construction 1): secret polynomial + public OOD freebie. */
-export async function keyGen(
+export function keyGen<T>(
+  F: Field<T>,
   nStar: number,
   K: number,
   seed: string,
-): Promise<JevilKey> {
+  degreeBoost = 0,
+): JevilKey<T> {
   const params = deriveParams(nStar, K);
-  const coeffs = await deriveCoeffs(seed, params.M); // SECRET
-  // Public per-key root hint (a demo stand-in for the commitment root).
-  const rootHint = "jv-" + (await hashId(seed));
-  const z = await deriveOOD(rootHint);
-  const w = evalPoly(coeffs, z); // f(z) — the freebie head start
-  return { params, seed, coeffs, rootHint, ood: { x: z, y: w } };
-}
-
-async function hashId(seed: string): Promise<string> {
-  const bytes = new TextEncoder().encode("JV-ROOT\x1f" + seed);
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", bytes as BufferSource),
-  );
-  return Array.from(digest.slice(0, 6))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  // True polynomial has M + degreeBoost coefficients; honest signer uses boost 0.
+  const coeffs = deriveCoeffs(F, seed, params.M + degreeBoost);
+  const rootHint = "jv-" + hashId(seed);
+  const z = deriveOOD(F, rootHint);
+  const w = evalPoly(F, coeffs, z); // f(z) — the freebie head start
+  return { params, field: F, seed, coeffs, degreeBoost, rootHint, ood: { x: z, y: w } };
 }
 
 /** Sign honestly: positions are whatever the message hashes to. */
-export async function sign(
-  key: JevilKey,
+export function sign<T>(
+  key: JevilKey<T>,
   message: string,
   signatureNumber: number,
   usedX: Set<string>,
-): Promise<Signature> {
-  const indices = await derivePositions(
-    key.rootHint,
-    message,
-    key.params.K,
-    key.params.T,
-  );
+): Signature<T> {
+  const F = key.field;
+  const indices = derivePositions(key.rootHint, message, key.params.K, key.params.T);
   let fresh = 0;
-  const points: SignedPoint[] = indices.map((i) => {
-    const x = psi(i);
-    const y = evalPoly(key.coeffs, x);
-    if (!usedX.has(x.toString())) fresh++;
+  const points: SignedPoint<T>[] = indices.map((i) => {
+    const x = psi(F, i);
+    const y = evalPoly(F, key.coeffs, x);
+    if (!usedX.has(F.fmtFull(x))) fresh++;
     return { x, y, index: i };
   });
   return { message, signatureNumber, points, fresh };
 }
 
-/**
- * The accumulating public record an observer sees: the OOD freebie plus every
- * revealed signature pair. ledgerPoints() returns DISTINCT pairs (by x) — only
- * distinct positions advance the cliff (paper §5.2–5.3).
- */
-export class Ledger {
-  readonly signatures: Signature[] = [];
-  private readonly ood: Point;
+/** The accumulating public record: OOD freebie plus every revealed pair. */
+export class Ledger<T> {
+  readonly signatures: Signature<T>[] = [];
+  private readonly F: Field<T>;
+  private readonly ood: Point<T>;
 
-  constructor(key: JevilKey) {
+  constructor(key: JevilKey<T>) {
+    this.F = key.field;
     this.ood = key.ood;
   }
 
-  add(sig: Signature): void {
+  add(sig: Signature<T>): void {
     this.signatures.push(sig);
   }
 
-  /** All points including duplicates and the OOD freebie. */
-  allPoints(): Point[] {
-    const pts: Point[] = [this.ood];
+  allPoints(): Point<T>[] {
+    const pts: Point<T>[] = [this.ood];
     for (const s of this.signatures) pts.push(...s.points);
     return pts;
   }
 
   /** Distinct points (by x), OOD first. */
-  ledgerPoints(): Point[] {
-    return dedupeByX(this.allPoints());
+  ledgerPoints(): Point<T>[] {
+    return dedupeByX(this.F, this.allPoints());
   }
 
-  /** Set of x-coordinates seen so far (for freshness checks). */
   usedX(): Set<string> {
     const s = new Set<string>();
-    for (const p of this.allPoints()) s.add(p.x.toString());
+    for (const p of this.allPoints()) s.add(this.F.fmtFull(p.x));
     return s;
   }
 }
 
-export interface CliffStatus {
-  distinct: number; // distinct points accumulated
-  needed: number; // D+1
+export interface CliffStatus<T> {
+  distinct: number;
+  needed: number; // advertised D+1
   reached: boolean;
-  recovered: bigint[] | null; // interpolated coefficients (live), or null
-  exact: boolean; // recovered === true secret?
+  recovered: T[] | null; // interpolated degree-D coefficients (live)
+  exact: boolean; // recovered === true secret? (false for a malicious key)
 }
 
 /**
- * Evaluate the cliff against the current ledger. When distinct ≥ D+1 we
- * interpolate the polynomial from the first D+1 distinct points and VERIFY the
- * recovered coefficients equal the true secret — proving the cliff is real, not
- * a scripted reveal.
+ * Evaluate the cliff against the current ledger. At the advertised D+1 distinct
+ * points we interpolate a degree-D polynomial and VERIFY it equals the true
+ * secret — proving the cliff is real. For a malicious (boosted-degree) key the
+ * true secret is higher-degree, so this check fails: the cheater escaped.
  */
-export function checkCliff(key: JevilKey, ledger: Ledger): CliffStatus {
+export function checkCliff<T>(key: JevilKey<T>, ledger: Ledger<T>): CliffStatus<T> {
+  const F = key.field;
   const distinctPts = ledger.ledgerPoints();
   const distinct = distinctPts.length;
   const needed = key.params.D + 1;
   if (distinct < needed) {
     return { distinct, needed, reached: false, recovered: null, exact: false };
   }
-  const recovered = interpolateCoeffs(distinctPts.slice(0, needed));
-  const exact = coeffsEqual(recovered, key.coeffs);
+  const recovered = interpolateCoeffs(F, distinctPts.slice(0, needed));
+  const exact = coeffsEqual(F, recovered, key.coeffs);
   return { distinct, needed, reached: true, recovered, exact };
 }
 
@@ -182,28 +179,24 @@ export interface DisjointResult {
 
 /**
  * The grinding attack (paper §5.2): search nonced messages for one whose K
- * positions are ALL fresh (disjoint from the ledger), packing distinct
- * evaluations into the public record as fast as possible — K per signature —
- * so the cliff is reached in exactly ceil(M/K) = n*+1 signatures.
+ * positions are ALL fresh, packing distinct evaluations into the public record
+ * as fast as possible — K per signature — to reach the cliff in n*+1 signatures.
  */
-export async function findDisjointMessage(
-  key: JevilKey,
+export function findDisjointMessage<T>(
+  key: JevilKey<T>,
   usedX: Set<string>,
   startNonce: number,
-): Promise<DisjointResult> {
+): DisjointResult {
+  const F = key.field;
   const { K, T } = key.params;
   let nonce = startNonce;
   const maxTries = 100000;
   for (let t = 0; t < maxTries; t++, nonce++) {
     const message = `grind#${nonce}`;
-    const indices = await derivePositions(key.rootHint, message, K, T);
-    const allFresh = indices.every((i) => !usedX.has(psi(i).toString()));
-    if (allFresh) {
+    const indices = derivePositions(key.rootHint, message, K, T);
+    if (indices.every((i) => !usedX.has(F.fmtFull(psi(F, i))))) {
       return { message, indices, noncesTried: t + 1 };
     }
   }
-  // Fallback: return whatever maximizes fresh count (rare with comfortable T).
   throw new Error("findDisjointMessage: no fully-disjoint message found");
 }
-
-export { mod };
