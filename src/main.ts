@@ -23,6 +23,22 @@ let key: JevilKey | null = null;
 let ledger: Ledger | null = null;
 let grindNonce = 0;
 
+// Serialize async handlers. Each sign/grind/generate reads the ledger, awaits a
+// hash, then mutates — so two overlapping runs (e.g. a fast double-click) would
+// both read the same signature number and `usedX` before either commits,
+// producing duplicate signatures and wrong fresh counts. This drops re-entrant
+// calls while one is in flight.
+let busy = false;
+function guard(fn: () => Promise<void>): () => void {
+  return () => {
+    if (busy) return;
+    busy = true;
+    void fn().finally(() => {
+      busy = false;
+    });
+  };
+}
+
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) =>
   document.querySelector(sel) as T;
 
@@ -373,7 +389,7 @@ async function doGrind() {
   if (checkCliff(key, ledger).reached) return flash("Cliff already reached &mdash; the secret is already public.");
   const before = checkCliff(key, ledger).distinct;
   const dr = await findDisjointMessage(key, ledger.usedX(), grindNonce);
-  grindNonce = grindNonce + dr.noncesTried + 1;
+  grindNonce += dr.noncesTried; // resume at the next untried nonce
   const sig = await sign(key, dr.message, ledger.signatures.length + 1, ledger.usedX());
   ledger.add(sig);
   const after = checkCliff(key, ledger);
@@ -412,7 +428,9 @@ function update() {
   $("#meter-count").textContent = `${cliff.distinct} / ${cliff.needed}`;
   const meter = $("#meter");
   meter.setAttribute("aria-valuemax", String(cliff.needed));
-  meter.setAttribute("aria-valuenow", String(cliff.distinct));
+  // Honest signing can push distinct past needed; clamp so valuenow stays a
+  // valid progressbar value within [valuemin, valuemax].
+  meter.setAttribute("aria-valuenow", String(Math.min(cliff.distinct, cliff.needed)));
   meter.setAttribute(
     "aria-valuetext",
     `${cliff.distinct} of ${cliff.needed} distinct points` +
@@ -536,14 +554,16 @@ function escapeHtml(s: string): string {
 // ----------------------------------------------------------------- boot ----
 function boot() {
   $("#app").innerHTML = shell();
-  $("#btn-gen").addEventListener("click", () => void doGenerate());
-  $("#btn-sign").addEventListener("click", () => void doSignHonest());
-  $("#btn-grind").addEventListener("click", () => void doGrind());
+  const generate = guard(doGenerate);
+  const signHonest = guard(doSignHonest);
+  $("#btn-gen").addEventListener("click", generate);
+  $("#btn-sign").addEventListener("click", signHonest);
+  $("#btn-grind").addEventListener("click", guard(doGrind));
   // Press Enter in the message field to sign honestly.
   $("#msg").addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") {
       e.preventDefault();
-      void doSignHonest();
+      signHonest();
     }
   });
 
@@ -568,7 +588,7 @@ function boot() {
     syncThemeButton(next);
   });
 
-  void doGenerate();
+  generate();
 }
 
 boot();
