@@ -16,8 +16,8 @@
 // and stayed hidden. The commitment is exactly what prevents this; this demo
 // omits it (see KNOWN-GAPS.md), so we can show what its absence would allow.
 
-import type { Field } from "./ff";
-import { deriveCoeffs, deriveOOD, derivePositions, hashId } from "./hash";
+import { GF, GF4, type Field } from "./ff";
+import { deriveCoeffs, deriveOOD, derivePositions, hashId, commit } from "./hash";
 import {
   interpolateCoeffs,
   dedupeByX,
@@ -41,6 +41,7 @@ export interface JevilKey<T> {
   coeffs: T[]; // THE SECRET (length M + degreeBoost)
   degreeBoost: number; // 0 = honest; >0 = malicious higher-degree key
   rootHint: string; // public per-key identifier
+  fingerprint: string; // public binding hash commitment to coeffs
   ood: Point<T>; // public out-of-domain freebie (z, f(z))
 }
 
@@ -89,7 +90,17 @@ export function keyGen<T>(
   const rootHint = "jv-" + hashId(seed);
   const z = deriveOOD(F, rootHint);
   const w = evalPoly(F, coeffs, z); // f(z) — the freebie head start
-  return { params, field: F, seed, coeffs, degreeBoost, rootHint, ood: { x: z, y: w } };
+  const fingerprint = commit(F, coeffs); // public binding commitment to the key
+  return {
+    params,
+    field: F,
+    seed,
+    coeffs,
+    degreeBoost,
+    rootHint,
+    fingerprint,
+    ood: { x: z, y: w },
+  };
 }
 
 /** Sign honestly: positions are whatever the message hashes to. */
@@ -199,4 +210,82 @@ export function findDisjointMessage<T>(
     }
   }
   throw new Error("findDisjointMessage: no fully-disjoint message found");
+}
+
+// ------------------------------------------------- auditable transcript ----
+// The transcript carries ONLY public data — params, the field id, the OOD
+// freebie, the binding key fingerprint, and the distinct revealed points. The
+// secret coefficients are NOT included. An independent verifier (verify.ts /
+// `npm run verify`) can reconstruct the key from this alone and check it against
+// the fingerprint — proving recovery comes from public data, not a stored secret.
+
+export interface Transcript {
+  scheme: "crypto-lab-jevil";
+  version: 1;
+  field: "base" | "tower";
+  params: Params;
+  rootHint: string;
+  fingerprint: string;
+  ood: { x: string[]; y: string[] };
+  points: { x: string[]; y: string[] }[];
+}
+
+export function exportTranscript<T>(key: JevilKey<T>, ledger: Ledger<T>): Transcript {
+  const F = key.field;
+  return {
+    scheme: "crypto-lab-jevil",
+    version: 1,
+    field: F.id,
+    params: key.params,
+    rootHint: key.rootHint,
+    fingerprint: key.fingerprint,
+    ood: { x: F.serialize(key.ood.x), y: F.serialize(key.ood.y) },
+    points: ledger.ledgerPoints().map((p) => ({
+      x: F.serialize(p.x),
+      y: F.serialize(p.y),
+    })),
+  };
+}
+
+export interface VerifyResult {
+  ok: boolean;
+  reason: string;
+  recoveredFingerprint: string | null;
+  distinct: number;
+  needed: number;
+}
+
+/** Independently verify a transcript using only its public data. */
+export function verifyTranscript(t: Transcript): VerifyResult {
+  if (t.scheme !== "crypto-lab-jevil") {
+    return { ok: false, reason: "not a crypto-lab-jevil transcript", recoveredFingerprint: null, distinct: 0, needed: 0 };
+  }
+  const F: Field<any> = t.field === "tower" ? GF4 : GF;
+  const pts: Point<any>[] = t.points.map((p) => ({
+    x: F.deserialize(p.x),
+    y: F.deserialize(p.y),
+  }));
+  const distinct = dedupeByX(F, pts);
+  const needed = t.params.D + 1;
+  if (distinct.length < needed) {
+    return {
+      ok: false,
+      reason: `insufficient points: ${distinct.length} distinct of ${needed} needed`,
+      recoveredFingerprint: null,
+      distinct: distinct.length,
+      needed,
+    };
+  }
+  const recovered = interpolateCoeffs(F, distinct.slice(0, needed));
+  const recoveredFingerprint = commit(F, recovered);
+  const ok = recoveredFingerprint === t.fingerprint;
+  return {
+    ok,
+    reason: ok
+      ? "recovered key matches the published fingerprint"
+      : "recovered degree-D key does NOT match the fingerprint (over-degree / malicious key, or tampered transcript)",
+    recoveredFingerprint,
+    distinct: distinct.length,
+    needed,
+  };
 }

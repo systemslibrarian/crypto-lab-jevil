@@ -13,6 +13,7 @@
 import * as B from "./field";
 
 export interface Field<T> {
+  readonly id: "base" | "tower";
   readonly name: string;
   /** base-field words consumed per element when sampling from the XOF */
   readonly coords: number;
@@ -28,12 +29,17 @@ export interface Field<T> {
   eq(a: T, b: T): boolean;
   /** build an element from `coords` base-field words (e.g. XOF output) */
   fromWords(words: bigint[]): T;
+  /** canonical decimal-string coords, for transcript export */
+  serialize(a: T): string[];
+  /** inverse of serialize, for transcript import */
+  deserialize(words: string[]): T;
   fmt(a: T): string;
   fmtFull(a: T): string;
 }
 
 // --------------------------------------------------- base field F_{q0} ------
 export const GF: Field<bigint> = {
+  id: "base",
   name: "Goldilocks F_q₀",
   coords: 1,
   zero: 0n,
@@ -46,6 +52,8 @@ export const GF: Field<bigint> = {
   inv: B.inv,
   eq: (a, b) => B.mod(a) === B.mod(b),
   fromWords: (w) => B.mod(w[0]),
+  serialize: (a) => [B.mod(a).toString()],
+  deserialize: (w) => B.mod(BigInt(w[0])),
   fmt: B.fmt,
   fmtFull: B.fmtFull,
 };
@@ -88,6 +96,7 @@ function gf4pow(a: E4, e: bigint): E4 {
 }
 
 export const GF4: Field<E4> = {
+  id: "tower",
   name: "Tower F_{q₀⁴} ≈ 2²⁵⁶",
   coords: 4,
   zero: [0n, 0n, 0n, 0n],
@@ -117,6 +126,8 @@ export const GF4: Field<E4> = {
     B.mod(a[2]) === B.mod(b[2]) &&
     B.mod(a[3]) === B.mod(b[3]),
   fromWords: (w) => [B.mod(w[0]), B.mod(w[1]), B.mod(w[2]), B.mod(w[3])],
+  serialize: (a) => a.map((x) => B.mod(x).toString()),
+  deserialize: (w) => [B.mod(BigInt(w[0])), B.mod(BigInt(w[1])), B.mod(BigInt(w[2])), B.mod(BigInt(w[3]))],
   fmt: (a) =>
     a.every((x, i) => i === 0 || B.mod(x) === 0n)
       ? B.fmt(a[0]) // pure base element — show compactly

@@ -12,6 +12,8 @@ import {
   Ledger,
   checkCliff,
   findDisjointMessage,
+  exportTranscript,
+  verifyTranscript,
   type JevilKey,
   type CliffStatus,
 } from "./jevil";
@@ -223,6 +225,15 @@ function shell(): string {
         the cliff.
       </p>
       <div id="ledger-out" class="ledger-out"><p class="muted">No signatures yet.</p></div>
+      <div class="export-row">
+        <button id="btn-export" class="btn">Export public transcript &amp; verify</button>
+        <p class="export-hint">
+          Downloads only public data (params, OOD pair, revealed points, key
+          fingerprint — <strong>no secret</strong>), then re-verifies it here.
+          Audit it yourself offline: <code>npm run verify &lt;file&gt;</code>.
+        </p>
+      </div>
+      <p id="export-result" class="hint" role="status" aria-live="polite"></p>
     </section>
 
     <section class="panel" id="panel-compare">
@@ -398,6 +409,7 @@ async function doGenerate() {
 
   $("#sign-hint").textContent = "";
   $("#recover-out").innerHTML = "";
+  $("#export-result").textContent = "";
   $("#panel-recover").classList.add("hidden");
   // Soft-vs-sharp comparison depends only on the chosen params.
   $("#compare").innerHTML = renderCompare(key.params);
@@ -444,6 +456,33 @@ function reportSign(fresh: number, before: number, after: CliffStatus<any>, labe
 
 function flash(msg: string) {
   $("#sign-hint").innerHTML = `<span class="danger-text">${msg}</span>`;
+}
+
+function doExport() {
+  if (!key || !ledger) return;
+  const transcript = exportTranscript(key, ledger);
+  const json = JSON.stringify(transcript, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `jevil-transcript-${key.rootHint}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  // Re-verify the just-exported public transcript, in the browser, to prove the
+  // round-trip works from public data alone.
+  const r = verifyTranscript(transcript);
+  const el = $("#export-result");
+  if (r.ok) {
+    el.className = "hint export-ok";
+    el.innerHTML = `&#10003; <strong>Verified.</strong> The key was reconstructed from ${r.distinct} public points and matches the published fingerprint <code>${transcript.fingerprint.slice(0, 16)}…</code>`;
+  } else {
+    el.className = "hint export-bad";
+    el.innerHTML = `&#9888; <strong>Not verified:</strong> ${r.reason} (${r.distinct}/${r.needed} points).`;
+  }
 }
 
 // --------------------------------------------------------- live update ----
@@ -642,6 +681,7 @@ function boot() {
   $("#btn-gen").addEventListener("click", generate);
   $("#btn-sign").addEventListener("click", signHonest);
   $("#btn-grind").addEventListener("click", guard(doGrind));
+  $("#btn-export").addEventListener("click", doExport);
   // Press Enter in the message field to sign honestly.
   $("#msg").addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") {

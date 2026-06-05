@@ -42,8 +42,22 @@ cliff** — the adversarial mode that packs the public ledger with disjoint
 points as fast as possible. Watch the distinct-point meter climb and, the
 instant it reaches `D+1`, see the secret key reconstructed live from public data
 with an exact-match check. This is a *signature* demo (no encrypt/decrypt); the
-controls are the budget `n*`, the positions-per-signature `K`, and the message
-to sign.
+controls are the budget `n*`, the positions-per-signature `K`, the **field**
+(legible base field or the paper's `F(q₀⁴) ≈ 2²⁵⁶` tower), and the **signer**
+(honest, or a malicious uncommitted higher-degree key that escapes the cliff —
+showing what the zk-WHIR commitment prevents).
+
+**Auditable, not just convincing.** Use **Export public transcript** to download
+a JSON file containing *only public data* — params, the OOD pair, the revealed
+points, and a binding fingerprint of the key (no secret). Anyone can then
+reconstruct the key from that file alone and check it against the fingerprint:
+
+```bash
+npm run verify path/to/jevil-transcript.json
+```
+
+A `VERIFIED` result proves the key fell out of public data — the recovery is not
+a stored answer. (A malicious/over-degree transcript verifies as `NOT VERIFIED`.)
 
 ## 4. How to Run Locally
 
@@ -54,8 +68,17 @@ npm install
 npm run dev
 ```
 
-No environment variables are required. (`npm test` runs the crypto-core
-faithfulness proof; `npm run build` produces the static site.)
+No environment variables are required.
+
+```bash
+npm test          # crypto-core faithfulness proof (both fields + malicious mode)
+npm run test:e2e  # browser regression suite (Playwright + axe-core, WCAG 2.1 AA)
+npm run build     # produce the static site
+```
+
+CI runs the core test, the build, and the e2e suite on every push
+(`.github/workflows/verify.yml`) and deploys to GitHub Pages
+(`deploy.yml`).
 
 ## 5. Part of the Crypto-Lab Suite
 

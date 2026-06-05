@@ -15,6 +15,7 @@ export const TAG_SEED = "JV-SEED"; // secret polynomial coefficients
 export const TAG_OOD = "JV-OOD"; // out-of-domain freebie point
 export const TAG_POSN = "JV-POSN"; // signature position indices
 export const TAG_ROOT = "JV-ROOT"; // public per-key root hint
+export const TAG_COMMIT = "JV-COMMIT"; // binding hash commitment to the key
 
 const enc = new TextEncoder();
 
@@ -47,6 +48,23 @@ export function xof(tag: string, inputs: string[], count: number): bigint[] {
 /** A short public hex id derived from the seed (the demo's root hint). */
 export function hashId(seed: string): string {
   const out = shake256(packInputs([TAG_ROOT, seed]), { dkLen: 6 });
+  return Array.from(out)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * A binding hash commitment to a coefficient vector: SHAKE256 over the
+ * serialized coefficients. This is a real *binding* commitment (it pins down the
+ * exact vector), published in the public key so an external verifier can confirm
+ * a recovered key matches. It is NOT the paper's zk-WHIR commitment, which also
+ * binds *evaluations* succinctly and in zero knowledge — see KNOWN-GAPS.md.
+ */
+export function commit<T>(F: Field<T>, coeffs: T[]): string {
+  const parts = coeffs.flatMap((c) => F.serialize(c));
+  const out = shake256(packInputs([TAG_COMMIT, String(coeffs.length), ...parts]), {
+    dkLen: 32,
+  });
   return Array.from(out)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");

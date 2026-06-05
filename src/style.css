@@ -747,6 +747,23 @@ input:focus-visible {
 .muted {
   color: var(--text-dim);
 }
+.export-row {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.export-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin: 10px 0 0;
+  max-width: 64ch;
+}
+.export-ok strong {
+  color: var(--green);
+}
+.export-bad strong {
+  color: var(--gold);
+}
 
 /* --------------------------------------------------------------- prose -- */
 .prose {

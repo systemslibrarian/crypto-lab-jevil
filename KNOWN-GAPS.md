@@ -54,6 +54,14 @@ Failure by Design"*, Cryptology ePrint Archive Paper 2026/1103,
   points per signature and hits the cliff in exactly `ceil(M/K) = n*+1`
   signatures (paper §5.2). (`src/jevil.ts: findDisjointMessage`)
 
+- **Auditable transcript + binding key commitment.** The public key carries a
+  binding hash commitment (SHAKE256) to the coefficient vector. **Export public
+  transcript** writes a JSON file of *only public data* (params, OOD pair,
+  revealed points, fingerprint — no secret), and an independent verifier
+  (`npm run verify <file>`) reconstructs the key from that file alone and checks
+  it against the fingerprint. Honest transcripts verify; malicious/over-degree
+  ones do not. (`src/jevil.ts: exportTranscript/verifyTranscript`, `scripts/verify.ts`)
+
 You can re-run the faithfulness proof: `npm test` builds a random degree-`D`
 polynomial, samples points at `g^i`, and confirms `D+1` points recover `f`
 exactly while `D` points do not — at the demo defaults *and* the real smallest
@@ -73,6 +81,12 @@ spec `n*=1, K=16 → D=31`.
   advertised cliff (`D+1` points) the interpolated degree-`D` polynomial is the
   *wrong* one and the key stays hidden — the cheater oversigns with impunity.
   The commitment is exactly what forbids this. (`src/jevil.ts` `degreeBoost`.)
+  We *do* publish a binding hash commitment (the key fingerprint, above), and the
+  verifier uses it to **detect** a recovered key that doesn't match — but a hash
+  commitment only binds the coefficient vector; it cannot prove an evaluation is
+  consistent with a degree-`D` polynomial without revealing the key. That
+  succinct, zero-knowledge evaluation-binding is what WHIR provides and what this
+  demo does not implement.
 - **Poseidon2 inside the (absent) commitment.** The paper also uses an
   arithmetization-friendly hash inside the commitment layer; with no commitment
   implemented, that hash has nothing to do here. No tag-padding / length-encoding
@@ -114,8 +128,10 @@ spec `n*=1, K=16 → D=31`.
 | `src/ff.ts` | Pluggable `Field<T>`: base `F_{q₀}` + quartic tower `F_{q₀⁴}` (faithful) |
 | `src/lagrange.ts` | Distinct-point dedupe + `O(D²)` interpolation, generic over the field (faithful) |
 | `src/hash.ts` | SHAKE256 random oracle: coeffs, OOD, positions (faithful) |
-| `src/jevil.ts` | KeyGen, sign, ledger, cliff check, grind, malicious mode (faithful) |
+| `src/jevil.ts` | KeyGen, sign, ledger, cliff check, grind, malicious mode, transcript export/verify (faithful) |
 | `src/plot.ts` | SVG cliff plot (illustrative geometry) |
 | `src/compare.ts` | Soft-vs-sharp chart, HORS bound (illustrative) |
 | `src/main.ts` | UI wiring |
 | `scripts/core.test.ts` | Faithfulness proof over both fields (`npm test`) |
+| `scripts/verify.ts` | Standalone transcript verifier (`npm run verify`) |
+| `scripts/e2e.test.mjs` | Browser regression suite (`npm run test:e2e`) |

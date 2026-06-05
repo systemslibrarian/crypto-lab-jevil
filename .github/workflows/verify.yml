@@ -1,0 +1,45 @@
+name: Verify (tests + e2e)
+
+# Regression gate: crypto-core test, the standalone transcript verifier, and the
+# browser-level e2e suite (Playwright + axe-core) against the built preview.
+# Separate from deploy so a flaky browser install can't block publishing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Crypto-core test (both fields + malicious mode)
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve the built site and run the e2e suite
+        run: |
+          npm run preview -- --port 4173 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4173/crypto-lab-jevil/ >/dev/null && break
+            sleep 1
+          done
+          BASE_URL=http://localhost:4173/crypto-lab-jevil/ npm run test:e2e
