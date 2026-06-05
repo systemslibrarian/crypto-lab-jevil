@@ -45,8 +45,9 @@ function seedToNum(s: string): number {
 // ----------------------------------------------------------- rendering ----
 function shell(): string {
   return `
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="hero">
-    <button id="theme-toggle" class="theme-toggle" aria-label="Switch to light mode" style="position: absolute; top: 0; right: 0">🌙</button>
+    <button id="theme-toggle" class="theme-toggle" aria-label="Switch to light mode" style="position: absolute; top: 0; right: 0"><span aria-hidden="true">🌙</span></button>
     <div class="hero-top">
       <span class="kicker">Crypto-Lab</span>
     </div>
@@ -69,10 +70,10 @@ function shell(): string {
     </p>
   </header>
 
-  <main class="panels">
+  <main class="panels" id="main-content" tabindex="-1">
 
     <section class="panel" id="panel-key">
-      <div class="panel-head"><span class="panel-num">01</span><h2>Generate a key</h2></div>
+      <div class="panel-head"><span class="panel-num" aria-hidden="true">01</span><h2>Generate a key</h2></div>
       <p class="panel-intro">
         The secret key is the coefficient vector of a random degree-<code>D</code>
         polynomial <code>f</code>. <strong>The coefficients are the secret.</strong>
@@ -107,7 +108,7 @@ function shell(): string {
     </section>
 
     <section class="panel" id="panel-sign">
-      <div class="panel-head"><span class="panel-num">02</span><h2>Sign messages</h2></div>
+      <div class="panel-head"><span class="panel-num" aria-hidden="true">02</span><h2>Sign messages</h2></div>
       <p class="panel-intro">
         Each signature reveals <code>K</code> evaluations of <code>f</code> at
         hash-derived positions. Honest signing takes whatever the message hashes
@@ -116,34 +117,41 @@ function shell(): string {
         the ledger as fast as possible.
       </p>
       <div class="controls">
-        <input id="msg" type="text" placeholder="a message to sign…" value="release v1.0" />
+        <label class="ctrl-msg">Message to sign
+          <input id="msg" type="text" placeholder="a message to sign…" value="release v1.0" autocomplete="off" />
+        </label>
         <button id="btn-sign" class="btn">Sign (honest)</button>
         <button id="btn-grind" class="btn btn-danger">Grind toward cliff &#9889;</button>
       </div>
-      <p id="sign-hint" class="hint"></p>
+      <p id="sign-hint" class="hint" role="status" aria-live="polite"></p>
     </section>
 
     <section class="panel" id="panel-cliff">
-      <div class="panel-head"><span class="panel-num">03</span><h2>The cliff</h2></div>
+      <div class="panel-head"><span class="panel-num" aria-hidden="true">03</span><h2>The cliff</h2></div>
       <div class="meter-wrap">
         <div class="meter-labels">
-          <span>distinct points</span>
+          <span id="meter-label">distinct points</span>
           <span id="meter-count">&mdash; / &mdash;</span>
         </div>
-        <div class="meter"><div id="meter-fill" class="meter-fill"></div></div>
+        <div class="meter" id="meter" role="progressbar" aria-labelledby="meter-label"
+          aria-valuemin="0" aria-valuenow="0" aria-valuetext="no key generated yet">
+          <div id="meter-fill" class="meter-fill"></div>
+        </div>
       </div>
-      <div id="cliff-status" class="cliff-status">Generate a key to begin.</div>
-      <div id="plot" class="plot"></div>
-      <p class="plot-caption">
-        Gold hollow dot = the out-of-domain freebie baked into the public key.
-        Red dots = points revealed by signatures. Below the cliff, several
-        degree-<code>D</code> curves fit the same points — the secret is one of
-        infinitely many. At <code>D+1</code> points they collapse to one.
-      </p>
+      <div id="cliff-status" class="cliff-status" role="status" aria-live="polite">Generate a key to begin.</div>
+      <figure class="plot-figure">
+        <div id="plot" class="plot"></div>
+        <figcaption class="plot-caption">
+          Gold hollow dot = the out-of-domain freebie baked into the public key.
+          Red dots = points revealed by signatures. Below the cliff, several
+          degree-<code>D</code> curves fit the same points — the secret is one of
+          infinitely many. At <code>D+1</code> points they collapse to one.
+        </figcaption>
+      </figure>
     </section>
 
     <section class="panel danger-panel hidden" id="panel-recover">
-      <div class="panel-head"><span class="panel-num">04</span><h2>Secret recovered</h2></div>
+      <div class="panel-head"><span class="panel-num" aria-hidden="true">04</span><h2>Secret recovered</h2></div>
       <p class="panel-intro">
         The key the signer believed was private, reconstructed from public data
         alone. Recovered coefficients (left) vs. the true secret (right),
@@ -153,7 +161,7 @@ function shell(): string {
     </section>
 
     <section class="panel" id="panel-ledger">
-      <div class="panel-head"><span class="panel-num">05</span><h2>Public ledger</h2></div>
+      <div class="panel-head"><span class="panel-num" aria-hidden="true">05</span><h2>Public ledger</h2></div>
       <p class="panel-intro">
         Everything an observer sees. The OOD freebie is gold-bordered. Duplicate
         positions (same <code>x</code>) are struck through — they do not advance
@@ -210,7 +218,7 @@ function shell(): string {
 
     <section class="prose related">
       <h2>Related Crypto-Lab demos</h2>
-      <div class="related-grid">
+      <nav class="related-grid" aria-label="Related Crypto-Lab demos">
         <a class="related-card" href="https://systemslibrarian.github.io/crypto-lab-rsa-forge/" target="_blank" rel="noopener">
           <strong>RSA Forge</strong><span>Textbook RSA, OAEP, PSS, and forgery attacks.</span></a>
         <a class="related-card" href="https://systemslibrarian.github.io/crypto-lab-dilithium-seal/" target="_blank" rel="noopener">
@@ -221,7 +229,7 @@ function shell(): string {
           <strong>Kyber Vault</strong><span>ML-KEM key encapsulation, visualized.</span></a>
         <a class="related-card" href="https://systemslibrarian.github.io/" target="_blank" rel="noopener">
           <strong>Crypto-Lab</strong><span>The full suite of interactive demos.</span></a>
-      </div>
+      </nav>
     </section>
 
     <footer class="scripture-footer">
@@ -314,12 +322,25 @@ function update() {
   if (!key || !ledger) return;
   const cliff = checkCliff(key, ledger);
 
-  // Meter.
+  // Meter (also exposed as an ARIA progressbar).
   const pct = Math.min(100, (cliff.distinct / cliff.needed) * 100);
   const fill = $("#meter-fill");
   fill.style.width = pct.toFixed(1) + "%";
   fill.className = "meter-fill " + meterClass(pct, cliff.reached);
   $("#meter-count").textContent = `${cliff.distinct} / ${cliff.needed}`;
+  const meter = $("#meter");
+  meter.setAttribute("aria-valuemax", String(cliff.needed));
+  meter.setAttribute("aria-valuenow", String(cliff.distinct));
+  meter.setAttribute(
+    "aria-valuetext",
+    `${cliff.distinct} of ${cliff.needed} distinct points` +
+      (cliff.reached ? " — cliff reached, secret recovered" : ""),
+  );
+
+  // Disable the grind once the cliff has fired (the secret is already public).
+  const grind = $<HTMLButtonElement>("#btn-grind");
+  grind.disabled = cliff.reached;
+  grind.setAttribute("aria-disabled", String(cliff.reached));
 
   // Status callout.
   const status = $("#cliff-status");
@@ -367,21 +388,22 @@ function renderRecovery(cliff: CliffStatus) {
       const rec = recovered[i];
       const match = mod(rec) === mod(trueC);
       return `<tr class="${match ? "match" : "mismatch"}">
-        <td class="idx">c<sub>${i}</sub></td>
+        <th scope="row" class="idx">c<sub>${i}</sub></th>
         <td class="mono">${fmtFull(rec)}</td>
-        <td class="cmp">${match ? "&#10003;" : "&#10007;"}</td>
+        <td class="cmp" aria-label="${match ? "matches" : "differs"}"><span aria-hidden="true">${match ? "&#10003;" : "&#10007;"}</span></td>
         <td class="mono">${fmtFull(trueC)}</td>
       </tr>`;
     })
     .join("");
   const verdict = cliff.exact
-    ? `<div class="verdict exact">EXACT MATCH &mdash; all ${key.coeffs.length} coefficients reconstructed from public data.</div>`
-    : `<div class="verdict bad">MISMATCH &mdash; recovery did not reproduce the secret.</div>`;
+    ? `<div class="verdict exact" role="status">EXACT MATCH &mdash; all ${key.coeffs.length} coefficients reconstructed from public data.</div>`
+    : `<div class="verdict bad" role="status">MISMATCH &mdash; recovery did not reproduce the secret.</div>`;
   $("#recover-out").innerHTML = `
     ${verdict}
-    <div class="table-scroll">
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Recovered coefficients versus true secret (scrollable)">
       <table class="coeff-table">
-        <thead><tr><th>coeff</th><th>recovered (from public data)</th><th></th><th>true secret</th></tr></thead>
+        <caption class="sr-only">Each row compares a recovered coefficient with the true secret coefficient.</caption>
+        <thead><tr><th scope="col">coeff</th><th scope="col">recovered (from public data)</th><th scope="col"><span class="sr-only">match</span></th><th scope="col">true secret</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -443,7 +465,7 @@ function boot() {
   const syncThemeButton = (theme: string) => {
     const btn = $("#theme-toggle");
     const dark = theme === "dark";
-    btn.textContent = dark ? "🌙" : "☀️";
+    btn.innerHTML = `<span aria-hidden="true">${dark ? "🌙" : "☀️"}</span>`;
     btn.setAttribute(
       "aria-label",
       dark ? "Switch to light mode" : "Switch to dark mode",
