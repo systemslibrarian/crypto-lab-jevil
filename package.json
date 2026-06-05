@@ -7,10 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "tsx scripts/core.test.ts"
+    "test": "tsx scripts/core.test.ts",
+    "deploy": "npm run build && gh-pages -d dist"
   },
   "devDependencies": {
-    "playwright": "^1.60.0",
+    "gh-pages": "^6.3.0",
     "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"
