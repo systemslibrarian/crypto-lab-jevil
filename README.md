@@ -1,6 +1,6 @@
 # crypto-lab-jevil
 
-## 1. What It Is
+## What It Is
 
 **Jevil** is a *few-time signature* (FTS) scheme — a digital signature whose key
 is only safe to use a fixed number of times, `n*`. Its secret key is the
@@ -16,7 +16,7 @@ It is **post-quantum** (hash-based, no number-theoretic hardness) and
 realized in this repo, it demonstrates the cliff *geometry* rather than the full
 commitment-bound scheme (see [`KNOWN-GAPS.md`](./KNOWN-GAPS.md)).
 
-## 2. When to Use It
+## When to Use It
 
 - **Firmware vendors capping signed releases per key** — the budget `n*` is the
   security property; exceeding it must be undeniable, which the cliff guarantees.
@@ -28,14 +28,14 @@ commitment-bound scheme (see [`KNOWN-GAPS.md`](./KNOWN-GAPS.md)).
 - **Audit-budgeted credentials** — where the *signer*, not the verifier, should
   bear the cost of breaking the cap; oversigning fails loudly and against the
   signer.
-- **When NOT to use it:** anything needing many signatures from one key — reach
+- **Do NOT use it** for anything needing many signatures from one key — reach
   for a standard scheme like ML-DSA (Dilithium) or SLH-DSA (SPHINCS+) instead;
   Jevil's whole point is that signature `n*+1` is catastrophic, not merely
-  weaker.
+  weaker, and this repo is a teaching demo of the cliff geometry.
 
-## 3. Live Demo
+## Live Demo
 
-**→ <https://systemslibrarian.github.io/crypto-lab-jevil/>**
+**[systemslibrarian.github.io/crypto-lab-jevil](https://systemslibrarian.github.io/crypto-lab-jevil/)**
 
 Generate a key, then either **Sign (honest)** a message or **Grind toward
 cliff** — the adversarial mode that packs the public ledger with disjoint
@@ -59,7 +59,22 @@ npm run verify path/to/jevil-transcript.json
 A `VERIFIED` result proves the key fell out of public data — the recovery is not
 a stored answer. (A malicious/over-degree transcript verifies as `NOT VERIFIED`.)
 
-## 4. How to Run Locally
+## What Can Go Wrong
+
+- **Exceeding the budget is total, not partial.** Once the distinct revealed points reach `D+1`, anyone Lagrange-interpolates the entire secret key — there is no "slightly weaker" zone.
+- **No graceful degradation.** Unlike soft-failing HORS/FORS, a few-time scheme with this cliff geometry has nothing between "safe" and "fully recovered."
+- **Misconfigured `K` and `D` blow the cap early.** The larger `K` is relative to `D`, the fewer signatures it takes to accumulate `D+1` distinct points, so a bad parameter choice exhausts the budget faster than expected.
+- **Without the commitment binding, the cliff can be dodged.** A malicious signer using an uncommitted higher-degree key escapes recovery; this repo shows that geometry but does not implement the full zk-WHIR commitment that prevents it (see `KNOWN-GAPS.md`).
+- **"Few" must actually be enforced.** Reusing one key across contexts, or losing track of the count, can quietly cross the threshold and leak the key.
+
+## Real-World Usage
+
+- Few-time and one-time hash-based signatures — HORS, and the FORS layer inside SLH-DSA/SPHINCS+ (FIPS 205) — are deployed where post-quantum, setup-free signatures are needed.
+- Hash-based signatures rest only on the security of hash functions, with no number-theoretic assumption for a quantum computer to break, which is why they anchor conservative PQ signature standards.
+- Hard signing-cap semantics map to real needs: firmware-release budgets, attestation limits, and ephemeral signers that must self-enforce a usage count.
+- The Goldilocks field (`2⁶⁴ − 2³² + 1`) used here is common in modern hash-based and STARK-friendly constructions because its arithmetic is fast.
+
+## How to Run Locally
 
 ```bash
 git clone https://github.com/systemslibrarian/crypto-lab-jevil
@@ -68,7 +83,15 @@ npm install
 npm run dev
 ```
 
-No environment variables are required.
+## Related Demos
+
+- [crypto-lab-sphincs-ledger](https://systemslibrarian.github.io/crypto-lab-sphincs-ledger/) — SLH-DSA (SPHINCS+), the stateless hash-based signature whose FORS layer Jevil echoes.
+- [crypto-lab-lms-ledger](https://systemslibrarian.github.io/crypto-lab-lms-ledger/) — LMS/HSS with W-OTS+, stateful hash-based signatures (NIST SP 800-208).
+- [crypto-lab-lms-xmss](https://systemslibrarian.github.io/crypto-lab-lms-xmss/) — LMS and XMSS one-time-signature trees side by side.
+- [crypto-lab-mpcith-sign](https://systemslibrarian.github.io/crypto-lab-mpcith-sign/) — MPC-in-the-Head signatures, another hash/symmetric-only PQ approach.
+- [crypto-lab-dilithium-seal](https://systemslibrarian.github.io/crypto-lab-dilithium-seal/) — ML-DSA (FIPS 204), the many-time PQ signature to reach for instead.
+
+## Testing
 
 ```bash
 npm test          # crypto-core faithfulness proof (both fields + malicious mode)
@@ -80,12 +103,8 @@ CI runs the core test, the build, and the e2e suite on every push
 (`.github/workflows/verify.yml`) and deploys to GitHub Pages
 (`deploy.yml`).
 
-## 5. Part of the Crypto-Lab Suite
-
-One of 60+ live browser demos at
-[systemslibrarian.github.io/crypto-lab](https://systemslibrarian.github.io/crypto-lab/)
-— spanning Atbash (600 BCE) through NIST FIPS 203/204/205 (2024).
-
 ---
 
-*"Whether you eat or drink, or whatever you do, do all to the glory of God." — 1 Corinthians 10:31*
+*One of 60+ browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
+
+*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
