@@ -357,6 +357,13 @@ function shell(): string {
     <footer class="scripture-footer">
       <a href="https://github.com/systemslibrarian/crypto-lab-jevil" target="_blank" rel="noopener">
         github.com/systemslibrarian/crypto-lab-jevil</a>
+      <p>Related demos:
+        <a href="https://systemslibrarian.github.io/crypto-lab-sphincs-ledger/" target="_blank" rel="noopener">crypto-lab-sphincs-ledger</a> ·
+        <a href="https://systemslibrarian.github.io/crypto-lab-lms-ledger/" target="_blank" rel="noopener">crypto-lab-lms-ledger</a> ·
+        <a href="https://systemslibrarian.github.io/crypto-lab-lms-xmss/" target="_blank" rel="noopener">crypto-lab-lms-xmss</a> ·
+        <a href="https://systemslibrarian.github.io/crypto-lab-mpcith-sign/" target="_blank" rel="noopener">crypto-lab-mpcith-sign</a> ·
+        <a href="https://systemslibrarian.github.io/crypto-lab-dilithium-seal/" target="_blank" rel="noopener">crypto-lab-dilithium-seal</a>
+      </p>
       <p>So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31</p>
     </footer>
   </main>`;
