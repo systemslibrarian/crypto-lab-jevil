@@ -9,11 +9,13 @@
     "preview": "vite preview",
     "test": "tsx scripts/core.test.ts",
     "test:e2e": "node scripts/e2e.test.mjs",
+    "test:a11y": "playwright test",
     "verify": "tsx scripts/verify.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
-    "playwright": "^1.60.0",
+    "@playwright/test": "^1.61.1",
+    "playwright": "^1.61.1",
     "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"
