@@ -105,7 +105,7 @@ check("K=16: plot omits high-degree curves", /curves omitted/.test(await page.te
 
 // --- theme toggle persistence ---
 const t0 = await page.getAttribute("html", "data-theme");
-await page.click("#theme-toggle");
+await page.click("#cl-theme-toggle");
 const t1 = await page.getAttribute("html", "data-theme");
 check("theme toggles", t0 !== t1);
 await page.reload({ waitUntil: "networkidle" });

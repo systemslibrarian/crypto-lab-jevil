@@ -66,8 +66,8 @@ function seedToNum(s: string): number {
 // ----------------------------------------------------------- rendering ----
 function shell(): string {
   return `
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="hero">
+  <main class="panels" id="main-content" tabindex="-1">
+  <div class="hero">
     <button id="theme-toggle" class="theme-toggle" aria-label="Switch to light mode" style="position: absolute; top: 0; right: 0"><span aria-hidden="true">🌙</span></button>
     <div class="hero-top">
       <span class="kicker">Crypto-Lab</span>
@@ -89,9 +89,7 @@ function shell(): string {
       <strong>real Lagrange interpolation over the Goldilocks field</strong>,
       computed live in your browser — not a simulation, not a scripted reveal.
     </p>
-  </header>
-
-  <main class="panels" id="main-content" tabindex="-1">
+  </div>
 
     <section class="panel" id="panel-key">
       <div class="panel-head"><span class="panel-num" aria-hidden="true">01</span><h2>Generate a key</h2></div>
