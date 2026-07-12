@@ -123,23 +123,22 @@ h3 {
 }
 
 /* ----------------------------------------------------------------- hero -- */
-.hero {
-  padding: 64px 0 40px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
-  position: relative;
-}
-.hero-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.kicker {
-  font-size: 12px;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
+/* BEGIN cl-hero standard — managed, keep in sync across fleet */
+.cl-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(1rem,4vw,3rem);flex-wrap:wrap;margin:clamp(1rem,3vw,2rem) 0 1.5rem;}
+.cl-hero-main{flex:1 1 22rem;min-width:min(100%,20rem);}
+.cl-hero-title{margin:0;font-size:clamp(1.6rem,3.8vw,2.7rem);font-weight:700;line-height:1.1;letter-spacing:.01em;}
+.cl-hero-sub{margin:.4rem 0 0;font-size:clamp(.9rem,1.6vw,1.05rem);letter-spacing:.01em;opacity:.85;}
+.cl-hero-desc{margin:.55rem 0 0;font-size:1rem;line-height:1.5;color:var(--text-dim);max-width:60ch;}
+.cl-hero-why{flex:0 1 min(40%,26rem);min-width:min(100%,15rem);border:1px solid var(--border);border-radius:10px;padding:.85rem 1.05rem;background:color-mix(in oklab,var(--accent) 6%,transparent);}
+.cl-hero-why-label{display:block;font-size:.68rem;font-weight:700;letter-spacing:.14em;}
+.cl-hero-why-text{margin:.35rem 0 0;font-size:.95rem;line-height:1.5;}
+@media (max-width:640px){.cl-hero{flex-direction:column;}.cl-hero-why{flex-basis:auto;width:100%;}}
+/* END cl-hero standard */
+.cl-hero{position:relative;}
+.cl-hero-title{font-family:"Fraunces",serif;color:var(--text-strong);}
+.cl-hero-sub{font-family:"Fraunces",serif;font-style:italic;color:var(--text-dim);}
+.cl-hero-why-label{color:var(--accent);}
+.cl-hero-why-text{color:var(--text);}
 .theme-toggle {
   width: 2.75rem;
   height: 2.75rem;
@@ -159,37 +158,6 @@ h3 {
 .theme-toggle:hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-.title {
-  font-family: "Fraunces", serif;
-  font-weight: 900;
-  font-size: clamp(64px, 16vw, 140px);
-  line-height: 0.92;
-  margin: 18px 0 4px;
-  background: linear-gradient(178deg, var(--text-strong) 38%, var(--accent) 130%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* fracture: a thin red seam through the wordmark */
-  position: relative;
-}
-.subtitle {
-  font-family: "Fraunces", serif;
-  font-size: clamp(18px, 3.6vw, 26px);
-  font-style: italic;
-  color: var(--text-dim);
-  margin: 0 0 26px;
-}
-.lede {
-  font-size: 16px;
-  max-width: 60ch;
-}
-.attribution {
-  font-size: 13px;
-  color: var(--text-dim);
-  border-left: 2px solid var(--accent);
-  padding-left: 14px;
-  margin-top: 24px;
 }
 
 /* --------------------------------------------------------------- panels -- */

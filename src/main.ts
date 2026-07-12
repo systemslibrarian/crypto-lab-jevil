@@ -67,29 +67,18 @@ function seedToNum(s: string): number {
 function shell(): string {
   return `
   <main class="panels" id="main-content" tabindex="-1">
-  <div class="hero">
+  <header class="cl-hero">
     <button id="theme-toggle" class="theme-toggle" aria-label="Switch to light mode" style="position: absolute; top: 0; right: 0"><span aria-hidden="true">🌙</span></button>
-    <div class="hero-top">
-      <span class="kicker">Crypto-Lab</span>
+    <div class="cl-hero-main">
+      <h1 class="cl-hero-title">Jevil</h1>
+      <p class="cl-hero-sub">Few-time signature · degree-D polynomial secret · Goldilocks field</p>
+      <p class="cl-hero-desc">Sign messages that reveal evaluations of a secret degree-D polynomial, then watch anyone Lagrange-interpolate the whole secret key the instant the distinct revealed points reach D+1.</p>
     </div>
-    <h1 class="title">Jevil</h1>
-    <p class="subtitle">A catastrophic-failure-by-design signature scheme</p>
-    <p class="lede">
-      Most few-time signatures fail <em>softly</em>: sign once too often and the
-      forgery probability creeps up like a gentle slope. Jevil fails the opposite
-      way — a sharp <strong class="danger-text">cliff</strong>. Stay within budget
-      and the key is ~124-bit safe. Cross it by a single signature and the secret
-      key doesn't leak gradually — it falls out <em>whole</em>, reconstructable by
-      anyone from the public record.
-    </p>
-    <p class="attribution">
-      Mechanic from Kobeissi,
-      <a href="https://eprint.iacr.org/2026/1103" target="_blank" rel="noopener">
-      &ldquo;Jevil&rdquo;, Cryptology ePrint 2026/1103</a>. The cliff here is
-      <strong>real Lagrange interpolation over the Goldilocks field</strong>,
-      computed live in your browser — not a simulation, not a scripted reveal.
-    </p>
-  </div>
+    <aside class="cl-hero-why" aria-label="Why it matters">
+      <span class="cl-hero-why-label">WHY IT MATTERS</span>
+      <p class="cl-hero-why-text">Few-time schemes are supposed to degrade gracefully. Jevil instead fails off a cliff: one signature past budget turns a ~124-bit-safe key into public data. It shows why a hard usage bound can be a catastrophe, not a warning.</p>
+    </aside>
+  </header>
 
     <section class="panel" id="panel-key">
       <div class="panel-head"><span class="panel-num" aria-hidden="true">01</span><h2>Generate a key</h2></div>
