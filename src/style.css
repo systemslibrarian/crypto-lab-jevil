@@ -8,6 +8,14 @@
   --bg-panel: #15121b;
   --bg-inset: #1d1925;
   --border: #2c2636;
+  /* Control boundaries only (WCAG 2.1 SC 1.4.11). Selects and text inputs are
+     filled with --bg-inset (#1d1925), which is 1.35:1 against --bg and 1.19:1
+     against --bg-panel, so the border is the only thing delineating the field.
+     #6f6879 stays on the lab's purple-black axis and clears 3:1 on every
+     surface a control sits on: 3.69:1 on --bg, 3.47:1 on --bg-panel, 3.23:1 on
+     --bg-inset. --border is left unchanged for decorative rules — panel
+     outlines, dividers, table rules, the plot strokes. */
+  --border-strong: #6f6879;
   --text: #cdc6d6;
   --text-dim: #978fa6; /* lightened for WCAG AA on inset surfaces */
   --text-strong: #f4f0fa;
@@ -27,6 +35,9 @@
   --bg-panel: #fffdf9;
   --bg-inset: #efe9e0;
   --border: #d8d0c4;
+  /* Same fix, other direction, on the light theme's warm parchment axis:
+     3.67:1 on --bg, 4.00:1 on --bg-panel, 3.37:1 on --bg-inset. */
+  --border-strong: #857d70;
   --text: #2c2630;
   --text-dim: #635a6e; /* darkened for WCAG AA */
   --text-strong: #110d18;
@@ -221,7 +232,7 @@ select,
 input[type="text"] {
   font-family: "Space Mono", monospace;
   background-color: var(--bg-inset);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   color: var(--text-strong);
   border-radius: 8px;
   padding: 10px 12px;
