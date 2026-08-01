@@ -5,8 +5,8 @@ Below `D+1` distinct points a degree-`D` polynomial is information-theoretically
 hidden; at `D+1` it snaps to a unique answer that anyone can reconstruct. That
 fact is implemented for real. A working signature scheme it is **not**.
 
-Source: M. Kobeissi, *"Jevil: A Few-Time Signature Scheme with Catastrophic
-Failure by Design"*, Cryptology ePrint Archive Paper 2026/1103,
+Source: N. Kobeissi, *"Jevil: A Catastrophic-Failure-by-Design Signature
+Scheme"*, Cryptology ePrint Archive Paper 2026/1103,
 <https://eprint.iacr.org/2026/1103>.
 
 > **This demo is for understanding the catastrophic-cliff idea, not for any real
