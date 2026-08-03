@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Strict WCAG A/AA accessibility gate (axe-core). Runs against the production
  * preview build so what deploys is what we scan.
  */
-const PORT = 4224;
+const PORT = 4654;
 const BASE = '/crypto-lab-jevil/';
 
 export default defineConfig({
