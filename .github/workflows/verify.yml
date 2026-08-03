@@ -37,9 +37,9 @@ jobs:
 
       - name: Serve the built site and run the e2e suite
         run: |
-          npm run preview -- --port 4173 &
+          npm run preview -- --port 4675 &
           for i in $(seq 1 60); do
-            curl -sf http://localhost:4173/crypto-lab-jevil/ >/dev/null && break
+            curl -sf http://localhost:4675/crypto-lab-jevil/ >/dev/null && break
             sleep 1
           done
-          BASE_URL=http://localhost:4173/crypto-lab-jevil/ npm run test:e2e
+          BASE_URL=http://localhost:4675/crypto-lab-jevil/ npm run test:e2e
