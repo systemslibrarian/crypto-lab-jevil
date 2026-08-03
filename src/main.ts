@@ -27,6 +27,15 @@ let key: JevilKey<any> | null = null;
 let ledger: Ledger<any> | null = null;
 let grindNonce = 0;
 
+// The export panel reports on ONE ledger state — "reconstructed from N public
+// points", or "insufficient points: a of b". Sign again and that sentence
+// describes a ledger that no longer exists: exporting below the cliff and then
+// grinding to it left "Not verified: insufficient points" sitting under
+// "Secret recovered — EXACT MATCH". `update()` stamps the live ledger and
+// retires the export line the moment the two diverge.
+let ledgerStamp = "";
+let exportStamp: string | null = null;
+
 // Serialize async handlers. Each sign/grind/generate reads the ledger, awaits a
 // hash, then mutates — so two overlapping runs (e.g. a fast double-click) would
 // both read the same signature number and `usedX` before either commits,
@@ -121,6 +130,7 @@ function shell(): string {
         </label>
         <button id="btn-gen" class="btn btn-primary">Generate key</button>
       </div>
+      <p id="param-pending" class="note pending hidden" role="status" aria-live="polite"></p>
       <p class="note">
         &#9432; <strong>Small params for visual clarity.</strong> Tiny
         <code>n*</code>/<code>K</code> keep the point count legible;
@@ -357,6 +367,43 @@ function shell(): string {
 }
 
 // ------------------------------------------------------------- handlers ----
+
+/**
+ * The four selectors are inputs to *Generate key*, not live controls — but
+ * nothing said so, so flipping n* or the signer left every panel below
+ * describing a key those settings no longer produce, with the meter, the cliff
+ * callout and the recovery verdict all reading as if they were about the
+ * selection on screen. Say plainly which key the page is talking about.
+ */
+function syncPendingParams(): void {
+  const el = $("#param-pending");
+  if (!key) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  const wantNStar = parseInt($<HTMLSelectElement>("#sel-nstar").value, 10);
+  const wantK = parseInt($<HTMLSelectElement>("#sel-k").value, 10);
+  const wantField = $<HTMLSelectElement>("#sel-field").value;
+  const wantSigner = $<HTMLSelectElement>("#sel-signer").value;
+  const haveField = key.field === GF4 ? "tower" : "base";
+  const haveSigner = key.degreeBoost > 0 ? "malicious" : "honest";
+
+  const pending =
+    wantNStar !== key.params.nStar ||
+    wantK !== key.params.K ||
+    wantField !== haveField ||
+    wantSigner !== haveSigner;
+
+  el.classList.toggle("hidden", !pending);
+  el.innerHTML = pending
+    ? `&#9432; <strong>Parameters changed — press <em>Generate key</em> to apply.</strong>
+       Everything below still describes the key in play:
+       <code>n*=${key.params.nStar}</code>, <code>K=${key.params.K}</code>,
+       ${haveField} field, ${haveSigner} signer.`
+    : "";
+}
+
 async function doGenerate() {
   const nStar = parseInt($<HTMLSelectElement>("#sel-nstar").value, 10);
   const K = parseInt($<HTMLSelectElement>("#sel-k").value, 10);
@@ -403,10 +450,13 @@ async function doGenerate() {
 
   $("#sign-hint").textContent = "";
   $("#recover-out").innerHTML = "";
+  $("#export-result").className = "hint";
   $("#export-result").textContent = "";
+  exportStamp = null;
   $("#panel-recover").classList.add("hidden");
   // Soft-vs-sharp comparison depends only on the chosen params.
   $("#compare").innerHTML = renderCompare(key.params);
+  syncPendingParams();
   update();
 }
 
@@ -470,6 +520,7 @@ function doExport() {
   // round-trip works from public data alone.
   const r = verifyTranscript(transcript);
   const el = $("#export-result");
+  exportStamp = ledgerStamp;
   if (r.ok) {
     el.className = "hint export-ok";
     el.innerHTML = `&#10003; <strong>Verified.</strong> The key was reconstructed from ${r.distinct} public points and matches the published fingerprint <code>${transcript.fingerprint.slice(0, 16)}…</code>`;
@@ -483,6 +534,16 @@ function doExport() {
 function update() {
   if (!key || !ledger) return;
   const cliff = checkCliff(key, ledger);
+
+  // Retire an export verdict that described an earlier ledger.
+  ledgerStamp = `${key.rootHint}:${ledger.signatures.length}:${cliff.distinct}`;
+  if (exportStamp !== null && exportStamp !== ledgerStamp) {
+    exportStamp = null;
+    const exportEl = $("#export-result");
+    exportEl.className = "hint";
+    exportEl.textContent =
+      "The ledger has changed since that export — export again to re-verify against the points on screen now.";
+  }
 
   // Meter (also exposed as an ARIA progressbar).
   const pct = Math.min(100, (cliff.distinct / cliff.needed) * 100);
@@ -676,6 +737,9 @@ function boot() {
   $("#btn-sign").addEventListener("click", signHonest);
   $("#btn-grind").addEventListener("click", guard(doGrind));
   $("#btn-export").addEventListener("click", doExport);
+  for (const sel of ["#sel-nstar", "#sel-k", "#sel-field", "#sel-signer"]) {
+    $(sel).addEventListener("change", syncPendingParams);
+  }
   // Press Enter in the message field to sign honestly.
   $("#msg").addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") {

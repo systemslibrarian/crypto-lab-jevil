@@ -95,9 +95,15 @@ npm run dev
 
 ```bash
 npm test          # crypto-core faithfulness proof (both fields + malicious mode)
-npm run test:e2e  # browser regression suite (Playwright + axe-core, WCAG 2.1 AA)
+npm run test:e2e  # browser regression suite: the page's numbers vs each other
+npm run test:a11y # Playwright: WCAG 2.1 AA (axe-core) + the functional claims gate
 npm run build     # produce the static site
 ```
+
+`test:a11y` runs everything in `e2e/`: the axe scan in both themes, and
+`e2e/claims.spec.ts`, which pins the states a single-run harness never reaches —
+an export verdict left describing a ledger that has since advanced, and key
+selectors moved without pressing **Generate key**.
 
 CI runs the core test, the build, and the e2e suite on every push
 (`.github/workflows/verify.yml`) and deploys to GitHub Pages

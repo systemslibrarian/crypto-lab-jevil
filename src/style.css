@@ -313,6 +313,14 @@ input:focus-visible {
   padding: 10px 14px;
   margin: 16px 0 0;
 }
+/* Pending-parameter note: the selectors are inputs to Generate, so say so
+   loudly enough to be seen next to the panels still describing the old key. */
+.note.pending {
+  border-style: solid;
+  border-color: var(--warn, var(--border));
+  color: var(--text);
+}
+
 .hint {
   font-size: 14px;
   min-height: 1.6em;
