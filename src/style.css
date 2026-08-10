@@ -8,14 +8,29 @@
   --bg-panel: #15121b;
   --bg-inset: #1d1925;
   --border: #2c2636;
-  /* Control boundaries only (WCAG 2.1 SC 1.4.11). Selects and text inputs are
-     filled with --bg-inset (#1d1925), which is 1.35:1 against --bg and 1.19:1
-     against --bg-panel, so the border is the only thing delineating the field.
-     #6f6879 stays on the lab's purple-black axis and clears 3:1 on every
-     surface a control sits on: 3.69:1 on --bg, 3.47:1 on --bg-panel, 3.23:1 on
-     --bg-inset. --border is left unchanged for decorative rules — panel
-     outlines, dividers, table rules, the plot strokes. */
+  /* Boundaries that a WCAG 2.1 SC 1.4.11 requirement lands on: 3:1 against the
+     surface behind them. #6f6879 stays on the lab's purple-black axis and
+     clears it on every surface a control sits on: 3.69:1 on --bg, 3.47:1 on
+     --bg-panel, 3.23:1 on --bg-inset. --border stays as it is, for genuinely
+     decorative rules — panel outlines, dividers, table rules, the .kv-grid
+     gaps, the inline <code> chip.
+
+     This token was introduced for `select` and `input[type=text]`, and for a
+     while that was the only rule using it — one rule against --border's 28.
+     Everything else that OWES 3:1 was still on the decorative hairline and was
+     measured failing on the running page: `.btn` at 1.27:1 (dark) / 1.50:1
+     (light) with a fill 1.07:1 / 1.19:1 from its panel, so two of the four
+     buttons had no perceivable edge at all; the `role="progressbar"` meter
+     track at the same numbers; and the plot and comparison chart axes at
+     1.18:1 / 1.27:1. A boundary token is only worth what it is APPLIED to —
+     if you add a control, a track or an axis, it belongs here, and the ones
+     you are sure are fine are the ones worth measuring. */
   --border-strong: #6f6879;
+  /* The light end of the meter's "safe" gradient. It was a bare #6fd0a5 —
+     correct on this theme at 9.23:1 against the track, and carried unchanged
+     into the light theme where it measured 1.55:1, so the right-hand half of a
+     safe budget bar was invisible there. */
+  --green-lite: #6fd0a5;
   --text: #cdc6d6;
   --text-dim: #978fa6; /* lightened for WCAG AA on inset surfaces */
   --text-strong: #f4f0fa;
@@ -35,9 +50,11 @@
   --bg-panel: #fffdf9;
   --bg-inset: #efe9e0;
   --border: #d8d0c4;
-  /* Same fix, other direction, on the light theme's warm parchment axis:
+  /* Same token, other direction, on the light theme's warm parchment axis:
      3.67:1 on --bg, 4.00:1 on --bg-panel, 3.37:1 on --bg-inset. */
   --border-strong: #857d70;
+  /* 3.74:1 against --bg-inset, where the meter track lives. */
+  --green-lite: #2a8659;
   --text: #2c2630;
   --text-dim: #635a6e; /* darkened for WCAG AA */
   --text-strong: #110d18;
@@ -137,16 +154,40 @@ h3 {
 .cl-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(1rem,4vw,3rem);flex-wrap:wrap;margin:clamp(1rem,3vw,2rem) 0 1.5rem;}
 .cl-hero-main{flex:1 1 22rem;min-width:min(100%,20rem);}
 .cl-hero-title{margin:0;font-size:clamp(1.6rem,3.8vw,2.7rem);font-weight:700;line-height:1.1;letter-spacing:.01em;}
-.cl-hero-sub{margin:.4rem 0 0;font-size:clamp(.9rem,1.6vw,1.05rem);letter-spacing:.01em;opacity:.85;}
+.cl-hero-sub{margin:.4rem 0 0;font-size:clamp(.9rem,1.6vw,1.05rem);letter-spacing:.01em;}
 .cl-hero-desc{margin:.55rem 0 0;font-size:1rem;line-height:1.5;color:var(--text-dim);max-width:60ch;}
 .cl-hero-why{flex:0 1 min(40%,26rem);min-width:min(100%,15rem);border:1px solid var(--border);border-radius:10px;padding:.85rem 1.05rem;background:color-mix(in oklab,var(--accent) 6%,transparent);}
 .cl-hero-why-label{display:block;font-size:.68rem;font-weight:700;letter-spacing:.14em;}
 .cl-hero-why-text{margin:.35rem 0 0;font-size:.95rem;line-height:1.5;}
 @media (max-width:640px){.cl-hero{flex-direction:column;}.cl-hero-why{flex-basis:auto;width:100%;}.cl-hero-main{flex-basis:auto;min-width:0;}}
 .cl-hero{position:relative;}
+/* Two corrections to the shared hero block above, both measured on the running
+   page rather than against the flat tokens.
+
+   .cl-hero-sub already says "de-emphasised" with --text-dim, which is a
+   contrast-tuned token. The `opacity: .85` it also carried said it a second
+   time, and opacity COMPOUNDS: the ink actually painted was #867d90 (dark) /
+   #796f7f (light), and over `body`'s radial washes that measured 4.48:1 dark
+   and 3.91:1 light against a 4.5:1 requirement. Dropping the opacity and
+   keeping the token leaves the same visual role at 5.71:1 / 5.36:1. The second
+   cue was the whole defect.
+
+   .cl-hero-why-label is 10.9px bold text sitting on the aside's
+   `color-mix(in oklab, var(--accent) 6%, transparent)` tint. In --accent it
+   measured 4.20:1 dark / 4.05:1 light. The palette already defines the ink for
+   exactly this situation — --danger-emph, whose own comment reads "red for
+   small text on tinted danger bg" — and this was the one place using the hue
+   that never got it: 6.17:1 / 5.69:1.
+
+   Both ratios DRIFT during a session, which is why they have to be measured on
+   the driven page. `body` paints two radial gradients whose radius is the
+   farthest corner of the body box, so as the ledger grows the document gets
+   taller, the radius grows, and the wash under the hero changes. Across one
+   drive the label ranged 4.06-4.23:1. A check against the flat token would have
+   seen none of it. */
 .cl-hero-title{font-family:"Fraunces",serif;color:var(--text-strong);}
 .cl-hero-sub{font-family:"Fraunces",serif;font-style:italic;color:var(--text-dim);}
-.cl-hero-why-label{color:var(--accent);}
+.cl-hero-why-label{color:var(--danger-emph);}
 .cl-hero-why-text{color:var(--text);}
 .theme-toggle {
   width: 2.75rem;
@@ -263,7 +304,9 @@ input:focus-visible {
   font-weight: 700;
   background-color: var(--bg-inset);
   color: var(--text-strong);
-  border: 1px solid var(--border);
+  /* --bg-inset is 1.07:1 (dark) / 1.19:1 (light) against the panel behind it,
+     so this border is the only thing that delineates the control. 1.4.11. */
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 10px 18px;
   font-size: 14px;
@@ -297,8 +340,10 @@ input:focus-visible {
   cursor: not-allowed;
   box-shadow: none;
 }
+/* Cancels the hover highlight without dropping back to the decorative
+   hairline — a :hover state must not REMOVE a boundary the resting state has. */
 .btn:disabled:hover {
-  border-color: var(--border);
+  border-color: var(--border-strong);
 }
 .btn-danger:disabled:hover {
   border-color: var(--btn-danger-bg);
@@ -397,10 +442,14 @@ input:focus-visible {
   font-weight: 700;
   color: var(--text-strong);
 }
+/* role="progressbar". The filled part is high-contrast, but the TRACK is what
+   shows how much budget is left, and at --border it was 1.27:1 / 1.50:1 against
+   the panel with a 1.07:1 / 1.19:1 fill — the empty half of the bar simply was
+   not there. 1.4.11 applies to the whole component, not just the lit part. */
 .meter {
   height: 16px;
   background-color: var(--bg-inset);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 99px;
   overflow: hidden;
 }
@@ -413,7 +462,7 @@ input:focus-visible {
     background 0.45s;
 }
 .meter-fill.safe {
-  background: linear-gradient(90deg, var(--green), #6fd0a5);
+  background: linear-gradient(90deg, var(--green), var(--green-lite));
 }
 .meter-fill.warn {
   background: linear-gradient(90deg, var(--green), var(--gold));
@@ -468,15 +517,23 @@ input:focus-visible {
   height: auto;
   display: block;
 }
+/* The axes are the figure's coordinate frame — you cannot read a point's
+   position without them — so they are a meaningful graphic at 3:1, not a rule.
+   Measured at --border: 1.18:1 (dark) / 1.27:1 (light) against the plot's
+   --bg-inset. */
 .cliff-svg .axis {
-  stroke: var(--border);
+  stroke: var(--border-strong);
   stroke-width: 1.5;
 }
+/* "Several degree-D curves fit the same points" is the exhibit's whole claim,
+   so these curves are content, not chrome. --text-dim already says
+   "secondary"; the 0.4 opacity said it a second time and COMPOUNDED, painting
+   them at 1.96:1 (dark) / 1.76:1 (light). The dash pattern is the non-colour
+   cue that they are hypothetical, so the opacity was never carrying meaning. */
 .cliff-svg .ghost-curve {
   fill: none;
-  stroke: var(--text-dim);
+  stroke: var(--border-strong);
   stroke-width: 1.4;
-  opacity: 0.4;
   stroke-dasharray: 4 4;
 }
 .cliff-svg .recovered-curve {
@@ -495,9 +552,10 @@ input:focus-visible {
   stroke: var(--gold);
   stroke-width: 2.5;
 }
+/* Unrevealed positions — the count of these IS the distance to the cliff.
+   Same compounding as .ghost-curve, one step further down at 0.35. */
 .cliff-svg .empty-slot {
-  fill: var(--text-dim);
-  opacity: 0.35;
+  fill: var(--border-strong);
 }
 .plot-caption {
   font-size: 12.5px;
@@ -522,11 +580,11 @@ input:focus-visible {
   display: block;
 }
 .cmp-axis {
-  stroke: var(--border);
+  stroke: var(--border-strong);
   stroke-width: 1.5;
 }
 .cmp-tick {
-  stroke: var(--border);
+  stroke: var(--border-strong);
   stroke-width: 1;
 }
 .cmp-axt,
@@ -727,10 +785,14 @@ input:focus-visible {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* One chip per revealed point, packed edge to edge in a wrapping row. Their
+   fill is 1.07:1 / 1.19:1 from the group behind them, so the border is what
+   separates one point from the next. The gold OOD chip below already gets a
+   3:1 border because the prose calls it out; the ordinary ones owe the same. */
 .led-pt {
   font-size: 12px;
   background-color: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 4px 8px;
   color: var(--text);
