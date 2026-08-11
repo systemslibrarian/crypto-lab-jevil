@@ -1,12 +1,47 @@
 // src/lagrange.ts — the cliff engine, generic over any Field<T>.
 //
 // A degree-D polynomial is uniquely determined by D+1 distinct points. Below
-// that count, infinitely many degree-D polynomials fit and the secret
-// coefficients are information-theoretically hidden; at exactly D+1 distinct
-// points the answer snaps to a unique polynomial recoverable in O(D²) field
-// operations (paper Theorem 1 / Theorem 2).
+// that count the revealed evaluations do not pin it down: with m distinct points
+// out of the D+1 needed, exactly |F|^(D+1−m) degree-D polynomials fit them, and
+// from those evaluations ALONE every one is equally likely. At exactly D+1
+// distinct points that count collapses to 1 and the answer is recoverable in
+// O(D²) field operations (paper Theorem 1 / Theorem 2).
+//
+// Note the two scopes, which the page used to run together:
+//   - "|F|^(D+1−m) fit" is a statement about the EVALUATION EQUATIONS. It is a
+//     finite number, not "infinitely many" — this is a finite field.
+//   - It is NOT a statement about this implementation's whole public key, which
+//     also publishes a binding fingerprint of the coefficients and derives them
+//     from an enumerable seed. See candidateCount's note and KNOWN-GAPS.md.
 
 import type { Field } from "./ff";
+
+/**
+ * How many degree-D polynomials are consistent with `distinct` revealed
+ * evaluations. Each unused degree of freedom ranges over the whole field, so
+ * the count is |F|^(D+1−distinct), and it is 1 once distinct reaches D+1.
+ *
+ * This is the number the page prints. It is deliberately EXACT rather than the
+ * word "infinitely many": the scheme lives in a finite field, so the set of
+ * consistent polynomials is finite and countable, and saying so is both true and
+ * more informative than the false version.
+ *
+ * SCOPE: this counts solutions of the evaluation equations only. An adversary
+ * who also uses the published key fingerprint — a binding commitment to the
+ * coefficient vector — can test candidates against it, so this count is not a
+ * claim about what an unbounded adversary can learn from the whole public key.
+ */
+export function candidateCount<T>(F: Field<T>, D: number, distinct: number): bigint {
+  const freeDims = Math.max(0, D + 1 - distinct);
+  return F.size ** BigInt(freeDims);
+}
+
+/** "2^704" / "1" — a readable magnitude for a candidate count. */
+export function formatCount(n: bigint): string {
+  if (n <= 1n) return "1";
+  const bits = n.toString(2).length - 1;
+  return `2^${bits}`;
+}
 
 export interface Point<T> {
   x: T;

@@ -360,6 +360,11 @@ input:focus-visible {
 }
 /* Pending-parameter note: the selectors are inputs to Generate, so say so
    loudly enough to be seen next to the panels still describing the old key. */
+/* Scope caveat under the cliff explainer — same treatment as .note, tighter to
+   the paragraph it qualifies. */
+.note.scope-note {
+  margin-top: 10px;
+}
 .note.pending {
   border-style: solid;
   border-color: var(--warn, var(--border));
@@ -416,9 +421,21 @@ input:focus-visible {
   color: var(--accent);
 }
 .ood-line,
+.fp-line,
 .secret-line {
   font-size: 13.5px;
   margin: 14px 0 0;
+}
+/* The public key fingerprint is the trust anchor for the offline verifier, so
+   it is shown in full rather than abbreviated. 64 hex chars must be able to wrap
+   without pushing the panel into horizontal scroll. */
+.fp-value {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  color: var(--gold);
+  font-weight: 700;
 }
 .ood-pair {
   color: var(--gold);

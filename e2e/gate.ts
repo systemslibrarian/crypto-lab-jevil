@@ -188,7 +188,7 @@ export async function boot(page: Page, theme: 'dark' | 'light'): Promise<void> {
   await expect(page.locator('#key-out')).toBeVisible();
   await expect(page.locator('#key-out')).toContainText('budget n*');
   await expect(page.locator('#ledger-out')).toContainText('OOD freebie');
-  await expect(page.locator('#cliff-status')).toContainText('Secret undetermined');
+  await expect(page.locator('#cliff-status')).toContainText('Algebraically underdetermined');
   await expect(page.locator('#meter-count')).toHaveText('1 / 12');
   await expect(page.locator('#sign-hint')).toBeEmpty();
   // These two really are hidden until something produces them.
@@ -474,7 +474,7 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   // path in `doGenerate` — the one that clears `#recover-out`, the export
   // verdict and `#sign-hint` — rather than the first-render path.
   await generate(page);
-  await expect(page.locator('#cliff-status')).toContainText('Secret undetermined');
+  await expect(page.locator('#cliff-status')).toContainText('Algebraically underdetermined');
   await scan(page, `${theme} / key regenerated (defaults)`);
 
   // Honest signing, which may or may not add distinct points — either is a
@@ -527,7 +527,11 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   const download = page.waitForEvent('download');
   await page.locator('#btn-export').click();
   await download;
-  await expect(page.locator('#export-result')).toContainText('Verified');
+  // "Internally consistent", NOT "Verified": the fingerprint the browser checks
+  // against is the one inside the file it just wrote, so a transcript from any
+  // other key passes identically. Anchoring needs an external fingerprint.
+  await expect(page.locator('#export-result')).toContainText('Internally consistent');
+  await expect(page.locator('#export-result')).not.toContainText('Verified.');
   await scan(page, `${theme} / transcript exported and verified`);
 
   // Signing again retires that verdict — a third state of the same element.

@@ -185,12 +185,14 @@ async function exportTranscript(p, name) {
   return { file, suggested: dl.suggestedFilename(), json: JSON.parse(readFileSync(file, "utf8")) };
 }
 
-/** Run the README's offline auditor: `npm run verify <file>`. */
-function runVerifyCli(file) {
-  const r = spawnSync(TSX, [join(REPO, "scripts", "verify.ts"), file], {
-    cwd: REPO,
-    encoding: "utf8",
-  });
+/**
+ * Run the README's offline auditor: `npm run verify <file> [--expected-fingerprint <fp>]`.
+ * Without the anchor it can only report internal consistency.
+ */
+function runVerifyCli(file, expectedFingerprint) {
+  const args = [join(REPO, "scripts", "verify.ts"), file];
+  if (expectedFingerprint) args.push("--expected-fingerprint", expectedFingerprint);
+  const r = spawnSync(TSX, args, { cwd: REPO, encoding: "utf8" });
   return { code: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 
@@ -208,7 +210,7 @@ await scan(page, "fresh/dark");
 
 // --- honest recovery (base) ---
 await gen(page, { nStar: 1, K: 2 });
-check("below cliff: secret undetermined", /undetermined/i.test(await page.textContent("#cliff-status")));
+check("below cliff: algebraically underdetermined", /underdetermined/i.test(await page.textContent("#cliff-status")));
 check("recovery panel hidden below cliff", await page.isHidden("#panel-recover"));
 await grindToCliff(page);
 check("honest: EXACT MATCH", /EXACT MATCH/.test(await page.textContent(".verdict")));
@@ -219,7 +221,8 @@ await scan(page, "honest/cliff");
 // --- export + verify round-trip (honest → verified) ---
 await page.click("#btn-export");
 await page.waitForTimeout(150);
-check("export verifies in-browser", /Verified/i.test(await page.textContent("#export-result")));
+check("export reports internal consistency in-browser",
+  /internally consistent/i.test(await page.textContent("#export-result")));
 
 // --- duplicate-point handling (honest sign same message twice) ---
 await gen(page, { nStar: 3, K: 3 });
@@ -304,7 +307,7 @@ await grindToCliff(page);
 check("tower: EXACT MATCH", /EXACT MATCH/.test(await page.textContent(".verdict")));
 await scan(page, "tower/cliff");
 
-// --- K=16 security grade ---
+// --- K=16, the paper's parameter value ---
 await gen(page, { nStar: 1, K: 16 });
 check("K=16: D=31", (await page.textContent(".kv:nth-child(4) code")).includes("31"));
 await grindToCliff(page, 6);
@@ -447,11 +450,34 @@ check("export: transcript has no coefficient or seed field",
   !/"coeffs"|"seed"/.test(readFileSync(good.file, "utf8")));
 
 const goodCli = runVerifyCli(good.file);
-check("`npm run verify` on the honest transcript prints VERIFIED",
-  goodCli.code === 0 && /✓ VERIFIED/.test(goodCli.out), `exit=${goodCli.code}`);
-check("CLI recovers the published fingerprint from public data alone",
-  /fingerprint published: ([0-9a-f]+)/.exec(goodCli.out)?.[1] ===
+// WITHOUT an anchor the CLI must NOT say "VERIFIED": the only fingerprint it can
+// compare against lives in the same file, so the claim is internal consistency.
+check("`npm run verify` unanchored reports INTERNALLY CONSISTENT, not VERIFIED",
+  goodCli.code === 0
+    && /~ INTERNALLY CONSISTENT/.test(goodCli.out)
+    && !/✓ VERIFIED/.test(goodCli.out),
+  `exit=${goodCli.code}`);
+check("…and says outright that this is not proof of provenance",
+  /NOT proof the transcript belongs to any particular key/.test(goodCli.out));
+check("CLI recovers the file's fingerprint from public data alone",
+  /fingerprint in file:  ([0-9a-f]+)/.exec(goodCli.out)?.[1] ===
     /fingerprint recovered: ([0-9a-f]+)/.exec(goodCli.out)?.[1]);
+
+// WITH the fingerprint read off the KEY PANEL — not out of the file — it becomes
+// a statement about which key this transcript belongs to.
+const panelFingerprint = (await page.textContent("#key-fingerprint")).trim();
+check("the key panel shows the full 64-hex public fingerprint",
+  /^[0-9a-f]{64}$/.test(panelFingerprint), panelFingerprint.slice(0, 20));
+const anchoredCli = runVerifyCli(good.file, panelFingerprint);
+check("`npm run verify --expected-fingerprint` (from the panel) reports VERIFIED",
+  anchoredCli.code === 0 && /✓ VERIFIED against the expected public key/.test(anchoredCli.out),
+  `exit=${anchoredCli.code}`);
+// …and a wrong anchor must be refused, or the flag would be decoration.
+const wrongAnchor = "0".repeat(64);
+const badAnchorCli = runVerifyCli(good.file, wrongAnchor);
+check("a WRONG expected fingerprint is refused [ANCHOR_MISMATCH]",
+  badAnchorCli.code === 1 && /ANCHOR_MISMATCH/.test(badAnchorCli.out),
+  `exit=${badAnchorCli.code}`);
 check("CLI reports the same point counts the page did",
   new RegExp(`points:\\s+${sg.distinct} distinct / ${sg.needed} needed`).test(goodCli.out));
 
@@ -464,8 +490,8 @@ writeFileSync(tamperFile, JSON.stringify(tampered));
 const tamperCli = runVerifyCli(tamperFile);
 check("tampered transcript: `npm run verify` reports NOT VERIFIED",
   tamperCli.code === 1 && /NOT VERIFIED/.test(tamperCli.out), `exit=${tamperCli.code}`);
-check("tampered transcript: recovered fingerprint diverges from the published one",
-  /fingerprint published: ([0-9a-f]+)/.exec(tamperCli.out)?.[1] !==
+check("tampered transcript: recovered fingerprint diverges from the file's",
+  /fingerprint in file:  ([0-9a-f]+)/.exec(tamperCli.out)?.[1] !==
     /fingerprint recovered: ([0-9a-f]+)/.exec(tamperCli.out)?.[1]);
 // A transcript of the wrong shape is refused before any interpolation happens.
 const alienFile = join(WORK, "alien.json");
@@ -474,6 +500,82 @@ const alienCli = runVerifyCli(alienFile);
 check("foreign transcript: CLI refuses it as not a jevil transcript",
   alienCli.code === 1 && /not a crypto-lab-jevil transcript/.test(alienCli.out),
   `exit=${alienCli.code}`);
+
+// ------------------------------------------------------------------------
+// What the page CLAIMS about what is hidden. Each of these was false as
+// rendered: the count is finite in a finite field, and "unlimited computing
+// power" is defeated by the page's own published fingerprint plus a
+// deterministic key derivation.
+// ------------------------------------------------------------------------
+await gen(page, { nStar: 3, K: 3 });
+const cliffPanel = (await page.textContent("#panel-cliff")).replace(/\s+/g, " ");
+// "infinitely many" may appear ONLY as something the page denies. Asserting the
+// substring is absent would be satisfied by deleting the correction too.
+const infinitelyClaims = [...cliffPanel.matchAll(/(.{0,12})infinitely many/gi)]
+  .filter((m) => !/not\s*[\u201c"']?$/i.test(m[1]));
+check("the cliff panel never ASSERTS 'infinitely many' in a finite field",
+  infinitelyClaims.length === 0, JSON.stringify(infinitelyClaims.map((m) => m[0])));
+check("…and it does say the phrase, as a correction",
+  /not [\u201c"']?infinitely many/i.test(cliffPanel));
+check("…and states the actual finite count |F|^(D+1-m)",
+  /\|F\|/.test(cliffPanel) && /D\+1.{0,3}m/.test(cliffPanel));
+check("…and scopes the claim to the evaluations alone",
+  /from the revealed evaluations alone/i.test(cliffPanel));
+check("…and names what the whole public key still leaks to an unbounded adversary",
+  /binding fingerprint/i.test(cliffPanel)
+    && /unbounded|unlimited/i.test(cliffPanel)
+    && /enumerate/i.test(cliffPanel));
+check("no panel still promises unlimited computing power cannot tell which is f",
+  !/unlimited computing power can't tell/i.test(await page.textContent("main")));
+
+// The live status must PRINT the computed count, and that count must fall as
+// points accumulate — not a fixed word.
+const countOf = async () => {
+  const m = /Exactly 2\^(\d+) degree-\d+/.exec(await page.textContent("#cliff-status"));
+  return m ? Number(m[1]) : null;
+};
+const c0 = await countOf();
+check("below cliff the status prints a concrete candidate count", c0 !== null, String(c0));
+await page.fill("#msg", "count-shrink-probe");
+await page.click("#btn-sign");
+await page.waitForTimeout(150);
+const c1 = await countOf();
+check("the candidate count SHRINKS as distinct points accumulate",
+  c0 !== null && c1 !== null && c1 < c0, `${c0} -> ${c1}`);
+// q0 = 2^64 - 2^32 + 1 is just under 2^64, so floor(log2(q0^k)) is 64k - 1.
+// The count must therefore land on that lattice, and drop by ~64 bits per point.
+check("…and the count is floor(log2(q0^k)) = 64k-1 for an integer k",
+  c1 !== null && (c1 + 1) % 64 === 0, String(c1));
+check("…and one extra distinct point costs about one field element of freedom",
+  c0 !== null && c1 !== null && (c0 - c1) % 64 === 0 && c0 - c1 >= 64,
+  `${c0} - ${c1} = ${c0 - c1}`);
+await grindToCliff(page);
+check("at the cliff the status stops offering alternatives",
+  !/Exactly 2\^/.test(await page.textContent("#cliff-status")));
+
+// The K selector must not call a single parameter a security grade.
+const keyPanel = (await page.textContent("#panel-key")).replace(/\s+/g, " ");
+check("K=16 is labelled the paper's parameter value, not a 'security grade'",
+  !/security grade/i.test(keyPanel) && /parameter value/i.test(keyPanel));
+check("…and the panel says K alone does not make a configuration secure",
+  /K.{0,20}alone does not make/i.test(keyPanel));
+
+// The ~124-bit figure belongs to the paper's full construction, not this page.
+const hero = (await page.textContent(".cl-hero-why-text")).replace(/\s+/g, " ");
+check("the 124-bit claim is scoped to the paper's full construction",
+  /124/.test(hero) && /paper's full construction/i.test(hero));
+
+// The priority claim is the paper's, and knowledge-scoped.
+const claim = (await page.textContent(".claim")).replace(/\s+/g, " ");
+check("the 'first FTS' priority claim is attributed and knowledge-scoped",
+  /to the author's knowledge/i.test(claim) && /paper's, not this lab's/i.test(claim));
+
+// The comparison chart must not read as a measurement.
+const cmpNote = (await page.textContent(".cmp-note")).replace(/\s+/g, " ");
+check("the soft-vs-sharp chart is labelled schematic, not measured",
+  /schematic, not measured/i.test(cmpNote)
+    && /negligible, not zero/i.test(cmpNote)
+    && /does not measure a forgery probability/i.test(cmpNote));
 
 // --- theme toggle persistence ---
 const t0 = await page.getAttribute("html", "data-theme");

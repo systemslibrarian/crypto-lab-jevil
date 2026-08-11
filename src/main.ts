@@ -14,9 +14,11 @@ import {
   findDisjointMessage,
   exportTranscript,
   verifyTranscript,
+  SEED_BYTES,
   type JevilKey,
   type CliffStatus,
 } from "./jevil";
+import { candidateCount, formatCount } from "./lagrange";
 import { renderPlot } from "./plot";
 import { renderCompare } from "./compare";
 
@@ -56,7 +58,7 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string) =>
   document.querySelector(sel) as T;
 
 function randomSeed(): string {
-  const buf = new Uint8Array(8);
+  const buf = new Uint8Array(SEED_BYTES);
   crypto.getRandomValues(buf);
   return Array.from(buf)
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -85,7 +87,7 @@ function shell(): string {
     </div>
     <aside class="cl-hero-why" aria-label="Why it matters">
       <span class="cl-hero-why-label">WHY IT MATTERS</span>
-      <p class="cl-hero-why-text">Few-time schemes are supposed to degrade gracefully. Jevil instead fails off a cliff: one signature past budget turns a ~124-bit-safe key into public data. It shows why a hard usage bound can be a catastrophe, not a warning.</p>
+      <p class="cl-hero-why-text">Few-time schemes are supposed to degrade gracefully. Jevil instead fails off a cliff. In the paper's full construction and recommended parameters, signatures through <code>n*</code> target about 124-bit classical security; signature <code>n*+1</code> makes the secret polynomial recoverable outright. It shows why a hard usage bound can be a catastrophe, not a warning.</p>
     </aside>
   </header>
 
@@ -113,7 +115,7 @@ function shell(): string {
             <option value="2">2 — Figure 1 of the paper</option>
             <option value="3" selected>3</option>
             <option value="4">4</option>
-            <option value="16">16 — security grade</option>
+            <option value="16">16 — the paper&rsquo;s parameter value</option>
           </select>
         </label>
         <label>Field
@@ -134,7 +136,10 @@ function shell(): string {
       <p class="note">
         &#9432; <strong>Small params for visual clarity.</strong> Tiny
         <code>n*</code>/<code>K</code> keep the point count legible;
-        <code>K=16</code> is the real security grade. <strong>Field</strong>
+        <code>K=16</code> is the value the paper uses &mdash; but <code>K</code>
+        alone does not make a configuration secure: the full parameter set, the
+        zk-WHIR commitment, the random-oracle encoding and the proof system do,
+        and this page ships none of the last three. <strong>Field</strong>
         swaps the legible 64-bit base field for the paper's degree-4 tower
         <code>F(q₀⁴) ≈ 2²⁵⁶</code> (same cliff, bigger numbers).
         <strong>Malicious</strong> models a signer the real scheme's zk-WHIR
@@ -169,13 +174,25 @@ function shell(): string {
     <section class="panel" id="panel-cliff">
       <div class="panel-head"><span class="panel-num" aria-hidden="true">03</span><h2>The cliff</h2></div>
       <p class="panel-intro">
-        Below <code>D+1</code> distinct points the secret is hidden
-        <strong>information-theoretically</strong> — not merely hard to compute.
-        Infinitely many degree-<code>D</code> polynomials fit the revealed points
-        equally well, so even unlimited computing power can't tell which is
-        <code>f</code>. Reach <code>D+1</code> and exactly one polynomial remains:
-        the answer snaps from <em>impossible</em> to <em>certain</em> in a single
+        <strong>From the revealed evaluations alone</strong>, fewer than
+        <code>D+1</code> distinct points do not determine <code>f</code>: with
+        <code>m</code> distinct points, exactly
+        <code>|F|<sup>D+1&minus;m</sup></code> degree-<code>D</code> polynomials fit
+        them &mdash; a large finite number, not &ldquo;infinitely many&rdquo;; this
+        is a finite field &mdash; and those equations rank every one equally. Reach
+        <code>D+1</code> and that count collapses to <strong>one</strong>: the
+        answer snaps from <em>underdetermined</em> to <em>certain</em> in a single
         signature. That discontinuity is the cliff.
+      </p>
+      <p class="note scope-note">
+        &#9432; <strong>Scope.</strong> &ldquo;Underdetermined&rdquo; is a statement
+        about the <em>evaluation equations</em>, not about this demo's whole public
+        key. The key also publishes a binding fingerprint of the coefficients and
+        derives them deterministically from a seed, so an adversary with unbounded
+        computing power can enumerate seeds and test them against that fingerprint.
+        Say <em>algebraically underdetermined</em> below the cliff,
+        <em>computationally protected</em> by the commitment and hash assumptions,
+        and <em>catastrophically recovered</em> at <code>D+1</code>.
       </p>
       <div class="meter-wrap">
         <div class="meter-labels">
@@ -194,7 +211,8 @@ function shell(): string {
           Gold hollow dot = the out-of-domain freebie baked into the public key.
           Red dots = points revealed by signatures. Below the cliff, several
           degree-<code>D</code> curves fit the same points — the secret is one of
-          infinitely many. At <code>D+1</code> points they collapse to one. The
+          <span id="plot-candidates">many</span>. At <code>D+1</code> points they
+          collapse to one. The
           curve shapes are an illustration; the binding proof is the exact
           coefficient match in panel 04.
         </figcaption>
@@ -223,11 +241,16 @@ function shell(): string {
       </p>
       <div id="ledger-out" class="ledger-out"><p class="muted">No signatures yet.</p></div>
       <div class="export-row">
-        <button id="btn-export" class="btn">Export public transcript &amp; verify</button>
+        <button id="btn-export" class="btn">Export public recovery transcript &amp; check</button>
         <p class="export-hint">
           Downloads only public data (params, OOD pair, revealed points, key
-          fingerprint — <strong>no secret</strong>), then re-verifies it here.
-          Audit it yourself offline: <code>npm run verify &lt;file&gt;</code>.
+          fingerprint — <strong>no secret</strong>), then re-checks it here. It
+          audits <em>interpolation and fingerprint consistency</em> — not which
+          messages were signed, how many signing operations produced the points,
+          or that they came from accepted signatures. Audit it yourself offline:
+          <code>npm run verify &lt;file&gt;</code>, or
+          <code>npm run verify &lt;file&gt; --expected-fingerprint &lt;fp&gt;</code>
+          to anchor it to a fingerprint you already trust.
         </p>
       </div>
       <p id="export-result" class="hint" role="status" aria-live="polite"></p>
@@ -248,7 +271,15 @@ function shell(): string {
         <figcaption class="cmp-legend">
           <span class="cmp-key cmp-key-soft">soft FTS — gradual slope</span>
           <span class="cmp-key cmp-key-jevil">Jevil — flat, then cliff</span>
-          <span class="cmp-note">Real FORS uses a far larger <code>T</code>, so its slope stays low much longer; the small demo <code>T</code> just makes the shape legible.</span>
+          <span class="cmp-note"><strong>Schematic, not measured.</strong> The two
+          lines are not on comparable footings: the soft curve is the HORS bound
+          <em>evaluated at this demo's tiny <code>T</code></em> (real FORS uses a
+          far larger <code>T</code>, so its slope stays low much longer), while the
+          Jevil line is the paper's claim for its full construction. The Jevil line
+          is drawn along the axis because a ~2<sup>&minus;124</sup> probability is
+          <em>negligible, not zero</em> — on a linear axis nothing else would be
+          visible. This demo does not measure a forgery probability for either
+          scheme; it shows the shape of the two failure modes.</span>
         </figcaption>
       </figure>
     </section>
@@ -279,9 +310,11 @@ function shell(): string {
         <li><strong>Audit-budgeted credentials</strong> where exceeding the budget must be undeniable.</li>
       </ul>
       <p class="claim">
-        Per the paper's Table 1, Jevil is the first <strong>post-quantum,
-        transparent, sharp-cliff, count-triggered</strong> few-time signature
-        scheme — combining properties no prior FTS offered together.
+        Per the paper's Table 1, Jevil is &mdash; <em>to the author's
+        knowledge</em> &mdash; the first <strong>post-quantum, transparent,
+        sharp-cliff, count-triggered</strong> few-time signature scheme, combining
+        properties no prior FTS offered together. That priority claim is the
+        paper's, not this lab's, and it is a recent preprint.
       </p>
     </section>
 
@@ -446,6 +479,15 @@ async function doGenerate() {
       needs, the head start that makes the cliff land at exactly signature
       <code>n*+1</code>.
     </p>
+    <p class="fp-line">
+      Public key fingerprint&nbsp;
+      <code id="key-fingerprint" class="fp-value">${key.fingerprint}</code>
+      &mdash; a binding hash of the coefficient vector, published with the key.
+      This is the <strong>trust anchor</strong>: an offline verifier that has this
+      value from an independent source can tell whether a transcript really
+      belongs to <em>this</em> key. A transcript checked only against the copy
+      inside its own file proves consistency, not provenance.
+    </p>
     ${secretLine}`;
 
   $("#sign-hint").textContent = "";
@@ -516,17 +558,28 @@ function doExport() {
   a.remove();
   URL.revokeObjectURL(url);
 
-  // Re-verify the just-exported public transcript, in the browser, to prove the
+  // Re-check the just-exported public transcript, in the browser, to prove the
   // round-trip works from public data alone.
   const r = verifyTranscript(transcript);
   const el = $("#export-result");
   exportStamp = ledgerStamp;
   if (r.ok) {
+    // NOT "Verified". The fingerprint this compares against is the one inside
+    // the file that was just exported, so a transcript from ANY other key passes
+    // the identical check — measured in scripts/core.test.ts. Calling that
+    // "Verified" claims a provenance the check does not establish.
     el.className = "hint export-ok";
-    el.innerHTML = `&#10003; <strong>Verified.</strong> The key was reconstructed from ${r.distinct} public points and matches the published fingerprint <code>${transcript.fingerprint.slice(0, 16)}…</code>`;
+    el.innerHTML =
+      `&#10003; <strong>Internally consistent.</strong> The key was reconstructed from ` +
+      `${r.distinct} public points, and its hash equals the fingerprint stored in the same file ` +
+      `(<code>${transcript.fingerprint.slice(0, 16)}…</code>). That proves recovery came from ` +
+      `public data &mdash; <strong>not</strong> that this file belongs to the key above; a transcript ` +
+      `exported from any other key passes this same check. Anchor it by running ` +
+      `<code>npm run verify &lt;file&gt; --expected-fingerprint …</code> with the fingerprint copied ` +
+      `from the key panel above, not from the file.`;
   } else {
     el.className = "hint export-bad";
-    el.innerHTML = `&#9888; <strong>Not verified:</strong> ${r.reason} (${r.distinct}/${r.needed} points).`;
+    el.innerHTML = `&#9888; <strong>Not verified</strong> [${r.code}]: ${r.reason} (${r.distinct}/${r.needed} points).`;
   }
 }
 
@@ -573,6 +626,16 @@ function update() {
   grind.disabled = cliff.reached;
   grind.setAttribute("aria-disabled", String(cliff.reached));
 
+  // How many degree-D polynomials still fit the revealed evaluations. Computed
+  // from the live field size and point count — the page used to say "infinitely
+  // many", which is false in a finite field, and printed it unconditionally.
+  const candidates = candidateCount(key.field, key.params.D, cliff.distinct);
+  const candText = cliff.distinct >= cliff.needed
+    ? "exactly one"
+    : `${formatCount(candidates)} of them`;
+  const pc = document.getElementById("plot-candidates");
+  if (pc) pc.textContent = candText;
+
   // Status callout.
   const status = $("#cliff-status");
   if (escaped) {
@@ -590,8 +653,9 @@ function update() {
     status.className = "cliff-status safe";
     const left = cliff.needed - cliff.distinct;
     status.innerHTML =
-      `&#128274; <strong>Secret undetermined.</strong> ${cliff.distinct} of ${cliff.needed} ` +
-      `points &mdash; ${left} short. Infinitely many degree-${key.params.D} polynomials still fit.`;
+      `&#128274; <strong>Algebraically underdetermined.</strong> ${cliff.distinct} of ${cliff.needed} ` +
+      `points &mdash; ${left} short. Exactly ${formatCount(candidates)} degree-${key.params.D} ` +
+      `polynomials still fit these evaluations.`;
   }
 
   // Plot.

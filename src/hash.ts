@@ -80,9 +80,33 @@ export function deriveCoeffs<T>(F: Field<T>, seed: string, M: number): T[] {
   return coeffs;
 }
 
-/** Derive the out-of-domain point z (Construction 1, step 4). */
-export function deriveOOD<T>(F: Field<T>, rootHint: string): T {
-  return F.fromWords(xof(TAG_OOD, [rootHint], F.coords));
+/**
+ * Derive the out-of-domain point z (Construction 1, step 4).
+ *
+ * "Out of domain" was a probabilistic expectation, not an enforced invariant:
+ * the old version hashed straight to a field element and never checked it
+ * against the position domain {psi(0)…psi(T−1)}. Measured over 1000 keys in the
+ * base field the collision rate was 0/1000 (expected ~T/q0 ≈ 1.3e-18), so this
+ * has never fired — but a z that landed in the domain would be deduped against a
+ * signed point, silently costing the ledger the freebie the cliff count assumes.
+ *
+ * `domain` is the set of canonical position strings to avoid; the counter makes
+ * the retry deterministic and reproducible. `drawWords` is injectable so the
+ * rejection branch can be tested rather than waited for.
+ */
+export function deriveOOD<T>(
+  F: Field<T>,
+  rootHint: string,
+  domain?: ReadonlySet<string>,
+  drawWords: (tag: string, inputs: string[], count: number) => bigint[] = xof,
+): T {
+  const MAX_DRAWS = 64;
+  for (let draw = 0; draw < MAX_DRAWS; draw++) {
+    const inputs = draw === 0 ? [rootHint] : [rootHint, `r${draw}`];
+    const z = F.fromWords(drawWords(TAG_OOD, inputs, F.coords));
+    if (!domain || !domain.has(F.fmtFull(z))) return z;
+  }
+  throw new Error("deriveOOD: no out-of-domain candidate found in 64 draws");
 }
 
 /**

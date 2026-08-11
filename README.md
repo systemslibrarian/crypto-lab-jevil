@@ -16,7 +16,12 @@ It is **post-quantum** (hash-based, no number-theoretic hardness) and
 realized in this repo, it demonstrates the cliff *geometry* rather than the full
 commitment-bound scheme (see [`KNOWN-GAPS.md`](./KNOWN-GAPS.md)).
 
-## When to Use It
+## Where the Idea Could Fit
+
+Jevil is a **recent preprint**, not a standardized or broadly audited production
+signature scheme, and this repo omits its load-bearing zk-WHIR commitment. Read
+the following as *proposed* applications of the cliff idea, not as deployment
+advice.
 
 - **Firmware vendors capping signed releases per key** — the budget `n*` is the
   security property; exceeding it must be undeniable, which the cliff guarantees.
@@ -41,23 +46,49 @@ Generate a key, then either **Sign (honest)** a message or **Grind toward
 cliff** — the adversarial mode that packs the public ledger with disjoint
 points as fast as possible. Watch the distinct-point meter climb and, the
 instant it reaches `D+1`, see the secret key reconstructed live from public data
-with an exact-match check. This is a *signature* demo (no encrypt/decrypt); the
+with an exact-match check. Below the cliff the page states, exactly, how many
+degree-`D` polynomials still fit the revealed evaluations — `|F|^(D+1−m)`, which
+is a large finite number, not "infinitely many"; this is a finite field. Note the
+scope: that statement is about the *evaluation equations*. The public key also
+publishes a binding fingerprint of the coefficients, so an adversary with
+unbounded computing power can enumerate seeds and test them against it. See
+[`KNOWN-GAPS.md`](./KNOWN-GAPS.md). This is a *signature* demo (no encrypt/decrypt); the
 controls are the budget `n*`, the positions-per-signature `K`, the **field**
 (legible base field or the paper's `F(q₀⁴) ≈ 2²⁵⁶` tower), and the **signer**
 (honest, or a malicious uncommitted higher-degree key that escapes the cliff —
 showing what the zk-WHIR commitment prevents).
 
-**Auditable, not just convincing.** Use **Export public transcript** to download
-a JSON file containing *only public data* — params, the OOD pair, the revealed
-points, and a binding fingerprint of the key (no secret). Anyone can then
-reconstruct the key from that file alone and check it against the fingerprint:
+**Auditable, not just convincing.** Use **Export public recovery transcript** to
+download a JSON file containing *only public data* — params, the OOD pair, the
+deduplicated revealed points, and a binding fingerprint of the key (no secret).
+Anyone can then reconstruct the key from that file alone:
 
 ```bash
+# internal consistency only — the fingerprint compared against is IN the file
 npm run verify path/to/jevil-transcript.json
+
+# anchored — the fingerprint comes from the key panel, not from the file
+npm run verify path/to/jevil-transcript.json --expected-fingerprint <64 hex>
 ```
 
-A `VERIFIED` result proves the key fell out of public data — the recovery is not
-a stored answer. (A malicious/over-degree transcript verifies as `NOT VERIFIED`.)
+**These two results say different things, and the CLI labels them differently.**
+
+- `~ INTERNALLY CONSISTENT` means the supplied points interpolate to a key whose
+  hash equals the fingerprint stored *in that same file*. It proves the recovery
+  is a computation, not a stored answer. It does **not** prove the file belongs
+  to any particular key: a transcript exported from a completely different key
+  passes identically, which this repo's own test suite demonstrates.
+- `✓ VERIFIED against the expected public key` requires `--expected-fingerprint`
+  from an independent source, and is the only result that speaks to provenance.
+
+A malicious/over-degree transcript, a tampered point, or any of seventeen
+malformed-field cases is refused with a structured code (`BAD_PARAMS`,
+`BAD_OOD`, `FINGERPRINT_MISMATCH`, `ANCHOR_MISMATCH`, …).
+
+The file is a **recovery** transcript, not a signature ledger: it shows that the
+included public points suffice to reconstruct the key. It does not record which
+messages were signed, how many signing operations produced the points, or which
+points belonged to which signature.
 
 ## What Can Go Wrong
 

@@ -1,9 +1,30 @@
 # KNOWN-GAPS.md — what's faithful, what's illustrative
 
 This demo exists to make **one idea** tangible: Jevil's *catastrophic cliff*.
-Below `D+1` distinct points a degree-`D` polynomial is information-theoretically
-hidden; at `D+1` it snaps to a unique answer that anyone can reconstruct. That
-fact is implemented for real. A working signature scheme it is **not**.
+From the revealed evaluations alone, fewer than `D+1` distinct points leave a
+degree-`D` polynomial **algebraically underdetermined** — with `m` distinct
+points exactly `|F|^(D+1−m)` degree-`D` polynomials fit, and those equations rank
+every one of them equally. At `D+1` that count collapses to one answer anyone can
+reconstruct. That fact is implemented for real. A working signature scheme it is
+**not**.
+
+**Scope, precisely — this file used to say "information-theoretically hidden"
+without one.** That phrase is true of the *evaluation equations*. It is not true
+of this implementation's whole public key, which also publishes a 256-bit binding
+fingerprint of the coefficient vector and derives those coefficients
+deterministically from a seed. An adversary with unbounded computing power can
+enumerate the seed space and test each candidate against the published
+fingerprint. Verified in this repo's own engine: with **zero** signatures issued
+and **zero** points revealed, a brute-force search over the seed space recovered
+the exact key using only the public fingerprint. The demo's seed is now 32 bytes
+(it was 8, i.e. a 2^64 key space); unbounded means unbounded either way. Use
+three distinct words:
+
+| state | means |
+|---|---|
+| **algebraically underdetermined** | fewer than `D+1` evaluations; `\|F\|^(D+1−m)` polynomials fit the equations |
+| **computationally protected** | what the commitment and hash assumptions buy — the *scheme's* actual pre-cliff security |
+| **catastrophically recovered** | `D+1` distinct evaluations; one polynomial, reconstructible by anyone |
 
 Source: N. Kobeissi, *"Jevil: A Catastrophic-Failure-by-Design Signature
 Scheme"*, Cryptology ePrint Archive Paper 2026/1103,
@@ -97,20 +118,51 @@ spec `n*=1, K=16 → D=31`.
   (negligible through `n*`, then 1 at `n*+1`). Both use the demo's live `K`/`T`.
   Real FORS uses a far larger `T`, so its slope stays low much longer; the small
   demo `T` only makes the curve's *shape* (gradual vs vertical) legible. The
-  `~2^-124` floor below the cliff is asserted, not drawn to scale.
+  `~2^-124` floor below the cliff is asserted, not drawn to scale — the Jevil
+  line sits **on** the axis because `2^-124` is negligible, not zero, and nothing
+  smaller than a pixel is visible on a linear axis. The two lines are also not on
+  comparable footings: the soft curve is evaluated at the demo's tiny `T` while
+  the Jevil line reports the paper's claim for its full construction. Neither is a
+  measurement of this demo, and the legend says so.
 - **The plot is a real-number geometric illustration.** Over Goldilocks,
   plotting `f(g^i)` does not produce a smooth curve. So Panel 03 renders the
   cliff geometry in real-number coordinate space: the degree `D` and the
-  revealed-point count are driven by live scheme state, the "infinitely many
-  fit" curves are genuine real-number interpolants through the revealed points,
+  revealed-point count are driven by live scheme state, the alternative curves
+  are genuine real-number interpolants through the revealed points,
   and the collapse to one curve at `D+1` is real — but the *values* are a
   legible illustration, not the Goldilocks field elements. The **binding**
   recovery proof (recovered `f` == true `f`) in Panel 04 uses the real field.
 - **Default parameters are tiny for visibility.** `n* ∈ {1..7}` and
-  `K ∈ {2,3,4}` keep the point count legible; `K = 16` (the real security grade,
-  `D = 31`+) is available via the selector but makes the plot/table dense. The
+  `K ∈ {2,3,4}` keep the point count legible; `K = 16` (the paper's parameter
+  value, `D = 31`+) is available via the selector but makes the plot/table dense.
+  `K = 16` alone does not make a configuration secure — the same screen still
+  offers the 64-bit base field, budgets the paper does not sanction, and no
+  zk-WHIR commitment — so the selector no longer calls it "security grade". The
   paper restricts `n*` so that `n*+1` is a power of two (`{1,3,7,15,…}`); we
   relax that. We don't claim a specific bit-security level for any UI choice.
+- **Modulo bias in position sampling — measured, and above the paper's target.**
+  `xof` reduces 128-bit SHAKE chunks mod `q₀`, a max relative bias of `2^-65`
+  (negligible). But `derivePositions` then reduces a field value in `[0,q₀)` mod
+  the small domain size `T`, and `q₀ mod T = 1` for every `T` this demo offers
+  (8, 24, 64, 128, 256), so one bucket in each is over-weighted by a max relative
+  bias of `T/q₀` — `2^-59` at `T = 8` up to `2^-56` at `T = 256`. That is
+  negligible for a visualizer but it is **not** below a `2^-124` target, so the
+  sampling here models the random oracle only to roughly 56–59 bits, not to the
+  paper's security level. Fixing it means rejection sampling against the largest
+  multiple of `T`, which changes every derived position; it is left as a known
+  gap rather than a silent change to the derivation contract.
+- **The exported transcript is a *recovery* transcript, not a signature ledger.**
+  It carries deduplicated points, so it proves the included public points suffice
+  to reconstruct a polynomial matching a fingerprint. It does not carry which
+  messages were signed, how the positions were derived, how many signing
+  operations produced the points, which points belonged to which signature, or
+  that any of them came from accepted signatures.
+- **A transcript that verifies with no `--expected-fingerprint` proves only
+  internal consistency.** The fingerprint it checks against lives in the same
+  file. Measured: a transcript exported from a completely different key passes
+  the unanchored check identically. Supplying `--expected-fingerprint` from an
+  independent source is what turns the result into a statement about provenance,
+  and the CLI and the page now label the two outcomes differently.
 - **No signature serialization.** Real Jevil signatures are ~40 KB–500 KB
   (commitment openings); we keep evaluations as field elements in memory.
 - **No formal security machinery.** No EUF-CMA hardness argument, no

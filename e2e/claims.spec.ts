@@ -118,6 +118,50 @@ async function exportTranscript(page: Page): Promise<{ text: string; cls: string
 
 // ─── 1. The headline verdict, anchored to numbers the page computed ──────────
 
+/**
+ * "How many polynomials still fit" is a COMPUTATION, and the page prints it.
+ * It used to print the word "infinitely", which is false in a finite field —
+ * with m distinct points exactly |F|^(D+1-m) degree-D polynomials fit. This
+ * recomputes that from the page's own D and point count, at two different point
+ * counts, and fails if the sweep never moves.
+ */
+test('the number of polynomials still fitting is |F|^(D+1-m), recomputed', async ({ page }) => {
+  await page.goto('.');
+  await generate(page, { nStar: 2, K: 3 });
+  const p = await params(page);
+
+  // q0 = 2^64 - 2^32 + 1, so |F|^k has floor(log2) = 64k - 1.
+  const Q0 = (1n << 64n) - (1n << 32n) + 1n;
+  const expectedBits = (distinct: number): bigint =>
+    BigInt((Q0 ** BigInt(p.D + 1 - distinct)).toString(2).length - 1);
+  const readCount = async (): Promise<bigint> => {
+    const m = /Exactly 2\^(\d+) degree-(\d+) polynomials/.exec(await text(page, '#cliff-status'));
+    expect(m, 'the status must print a concrete candidate count').not.toBeNull();
+    expect(Number(m![2]), 'the count must be about the advertised degree').toBe(p.D);
+    return BigInt(m![1]);
+  };
+
+  const fresh = await meter(page);
+  expect(fresh.distinct).toBe(1);
+  const first = await readCount();
+  expect(first, 'with the free OOD point alone, |F|^D polynomials fit').toBe(expectedBits(1));
+
+  await page.fill('#msg', 'candidate-count-probe');
+  await page.click('#btn-sign');
+  await expect(page.locator('#meter-count')).not.toHaveText(`1 / ${fresh.needed}`);
+  const mid = await meter(page);
+  expect(mid.distinct, 'the probe signature must reveal fresh points').toBeGreaterThan(1);
+
+  const second = await readCount();
+  expect(second, `candidates at ${mid.distinct} points`).toBe(expectedBits(mid.distinct));
+  expect(second, 'the count must SHRINK as points accumulate').toBeLessThan(first);
+
+  // At the cliff there is exactly one, so the status must stop offering alternatives.
+  await grindToCliff(page);
+  expect(await text(page, '#cliff-status')).not.toMatch(/Exactly 2\^/);
+  expect(await text(page, '#cliff-status')).toMatch(/Secret recovered/i);
+});
+
 test('the cliff fires at n*+1 and recovers exactly the published number of coefficients', async ({ page }) => {
   await page.goto('.');
   await generate(page, { nStar: 2, K: 3 });
@@ -132,7 +176,7 @@ test('the cliff fires at n*+1 and recovers exactly the published number of coeff
   const fresh = await meter(page);
   expect(fresh.needed).toBe(p.D + 1);
   expect(fresh.distinct, 'a fresh key already holds the free OOD point').toBe(1);
-  expect(await text(page, '#cliff-status')).toMatch(/Secret undetermined/i);
+  expect(await text(page, '#cliff-status')).toMatch(/Algebraically underdetermined/i);
   await expect(page.locator('#panel-recover')).toHaveClass(/hidden/);
 
   const signatures = await grindToCliff(page);
@@ -298,7 +342,7 @@ test('changing a selector without pressing Generate is flagged, not silently ign
   expect(next.K).toBe(4);
   expect(next.M).toBe(8 * 4);
   await expect(page.locator('#panel-recover')).toHaveClass(/hidden/);
-  expect(await text(page, '#cliff-status')).toMatch(/Secret undetermined/i);
+  expect(await text(page, '#cliff-status')).toMatch(/Algebraically underdetermined/i);
 });
 
 // ─── 5. Controls stay alive ──────────────────────────────────────────────────

@@ -56,6 +56,18 @@ export interface Signature<T> {
   fresh: number; // how many x were new to the ledger when signed
 }
 
+/**
+ * Bytes of entropy in a freshly generated seed.
+ *
+ * 32, not 8. An 8-byte seed made the demo's ENTIRE key space 2^64 — enumerable,
+ * and directly at odds with the "~124-bit" language the page uses elsewhere.
+ * Because the coefficients are derived deterministically from the seed and the
+ * public key publishes a binding fingerprint of them, the seed space IS the
+ * search space for an unbounded adversary. The paper's secret key is 32 bytes;
+ * this now matches it.
+ */
+export const SEED_BYTES = 32;
+
 /** Derive scheme parameters (paper §4.1). */
 export function deriveParams(nStar: number, K: number): Params {
   const M = (nStar + 1) * K;
@@ -76,6 +88,13 @@ export function psi<T>(F: Field<T>, i: number): T {
   return F.pow(F.generator, BigInt(i));
 }
 
+/** The canonical string forms of every position psi(0)…psi(T−1). */
+export function positionDomain<T>(F: Field<T>, T_: number): Set<string> {
+  const s = new Set<string>();
+  for (let i = 0; i < T_; i++) s.add(F.fmtFull(psi(F, i)));
+  return s;
+}
+
 /** KeyGen (paper Construction 1): secret polynomial + public OOD freebie. */
 export function keyGen<T>(
   F: Field<T>,
@@ -88,7 +107,10 @@ export function keyGen<T>(
   // True polynomial has M + degreeBoost coefficients; honest signer uses boost 0.
   const coeffs = deriveCoeffs(F, seed, params.M + degreeBoost);
   const rootHint = "jv-" + hashId(seed);
-  const z = deriveOOD(F, rootHint);
+  // The OOD point must actually be out of the position domain, or it would be
+  // deduped against a signed point and the cliff would need one more signature
+  // than the key advertises. Enforced, not merely improbable.
+  const z = deriveOOD(F, rootHint, positionDomain(F, params.T));
   const w = evalPoly(F, coeffs, z); // f(z) — the freebie head start
   const fingerprint = commit(F, coeffs); // public binding commitment to the key
   return {
@@ -247,45 +269,182 @@ export function exportTranscript<T>(key: JevilKey<T>, ledger: Ledger<T>): Transc
   };
 }
 
+export type VerifyCode =
+  | "OK_INTERNALLY_CONSISTENT"
+  | "OK_ANCHORED"
+  | "BAD_SCHEMA"
+  | "BAD_VERSION"
+  | "BAD_FIELD"
+  | "BAD_PARAMS"
+  | "BAD_POINTS"
+  | "BAD_OOD"
+  | "INSUFFICIENT_POINTS"
+  | "FINGERPRINT_MISMATCH"
+  | "ANCHOR_MISMATCH";
+
 export interface VerifyResult {
   ok: boolean;
+  /**
+   * True only when the caller supplied an expected fingerprint from an
+   * independent source AND the recovered key matched it. `ok` without this means
+   * "these points interpolate to a polynomial whose hash equals the hash stored
+   * in this same file" — internal consistency, which a forger can also produce.
+   */
+  anchored: boolean;
+  code: VerifyCode;
   reason: string;
   recoveredFingerprint: string | null;
   distinct: number;
   needed: number;
 }
 
-/** Independently verify a transcript using only its public data. */
-export function verifyTranscript(t: Transcript): VerifyResult {
-  if (t.scheme !== "crypto-lab-jevil") {
-    return { ok: false, reason: "not a crypto-lab-jevil transcript", recoveredFingerprint: null, distinct: 0, needed: 0 };
+const SUPPORTED_VERSION = 1;
+const MAX_POINTS = 4096; // a transcript is small; refuse a resource-exhaustion file
+
+function fail(code: VerifyCode, reason: string, distinct = 0, needed = 0): VerifyResult {
+  return { ok: false, anchored: false, code, reason, recoveredFingerprint: null, distinct, needed };
+}
+
+/**
+ * Independently verify a transcript using only its public data.
+ *
+ * TWO DIFFERENT CLAIMS, which this used to collapse into one "VERIFIED":
+ *
+ *   internally consistent — the supplied points interpolate to a polynomial
+ *     whose hash equals the fingerprint SUPPLIED IN THE SAME FILE. Anyone can
+ *     manufacture this: generate any key, export its transcript, and it passes.
+ *     Measured: a transcript exported from a completely different key verifies.
+ *
+ *   anchored — the recovered key also matches an `expectedFingerprint` the
+ *     caller obtained from somewhere other than this file. Only this shows the
+ *     transcript belongs to a particular advertised public key.
+ *
+ * Every self-describing field is now checked. Previously 10 of 11 tampered
+ * fields still verified: `ood`, `version`, `field`, `rootHint`, `nStar`, `M`,
+ * `T`, `nCliff` and duplicated points were all ignored, and an unknown `field`
+ * silently fell through to the base field.
+ */
+export function verifyTranscript(t: Transcript, expectedFingerprint?: string): VerifyResult {
+  if (!t || typeof t !== "object") return fail("BAD_SCHEMA", "transcript is not an object");
+  if (t.scheme !== "crypto-lab-jevil") return fail("BAD_SCHEMA", "not a crypto-lab-jevil transcript");
+  if (t.version !== SUPPORTED_VERSION) {
+    return fail("BAD_VERSION", `unsupported transcript version ${t.version} (this verifier speaks ${SUPPORTED_VERSION})`);
   }
+  if (t.field !== "base" && t.field !== "tower") {
+    return fail("BAD_FIELD", `unknown field "${t.field}" — refusing to guess (it used to fall through to the base field)`);
+  }
+  if (typeof t.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(t.fingerprint)) {
+    return fail("BAD_SCHEMA", "fingerprint must be 64 lowercase hex characters");
+  }
+  if (typeof t.rootHint !== "string" || !/^jv-[0-9a-f]{12}$/.test(t.rootHint)) {
+    return fail("BAD_SCHEMA", `rootHint must look like jv-<12 hex>, got "${t.rootHint}"`);
+  }
+
+  // Parameter identities (paper §4.1). A transcript whose params contradict each
+  // other cannot describe any real key, whatever its points interpolate to.
+  const p = t.params;
+  const ints = (["nStar", "K", "M", "D", "T", "nCliff"] as const).every(
+    (k) => Number.isInteger(p?.[k]) && p[k] >= 0 && p[k] <= 100000,
+  );
+  if (!ints) return fail("BAD_PARAMS", "params must be small non-negative integers");
+  if (p.nStar < 1 || p.K < 1) return fail("BAD_PARAMS", "n* and K must be at least 1");
+  if (p.M !== (p.nStar + 1) * p.K) return fail("BAD_PARAMS", `M must equal (n*+1)·K = ${(p.nStar + 1) * p.K}, got ${p.M}`);
+  if (p.D !== p.M - 1) return fail("BAD_PARAMS", `D must equal M−1 = ${p.M - 1}, got ${p.D}`);
+  if (p.T !== 2 * p.M) return fail("BAD_PARAMS", `T must equal 2M = ${2 * p.M}, got ${p.T}`);
+  if (p.nCliff !== p.nStar + 1) return fail("BAD_PARAMS", `nCliff must equal n*+1 = ${p.nStar + 1}, got ${p.nCliff}`);
+
   const F: Field<any> = t.field === "tower" ? GF4 : GF;
-  const pts: Point<any>[] = t.points.map((p) => ({
-    x: F.deserialize(p.x),
-    y: F.deserialize(p.y),
-  }));
+  const needed = p.D + 1;
+
+  if (!Array.isArray(t.points)) return fail("BAD_POINTS", "points must be an array");
+  if (t.points.length > MAX_POINTS) {
+    return fail("BAD_POINTS", `${t.points.length} points exceeds the ${MAX_POINTS} cap`);
+  }
+  const coordOk = (w: unknown): boolean =>
+    Array.isArray(w) && w.length === F.coords && w.every((c) => typeof c === "string" && /^\d+$/.test(c));
+  for (const [i, pt] of t.points.entries()) {
+    if (!coordOk(pt?.x) || !coordOk(pt?.y)) {
+      return fail("BAD_POINTS", `point ${i} does not have ${F.coords} decimal coordinate(s) for the ${t.field} field`);
+    }
+  }
+  if (!coordOk(t.ood?.x) || !coordOk(t.ood?.y)) {
+    return fail("BAD_OOD", `ood does not have ${F.coords} decimal coordinate(s) for the ${t.field} field`);
+  }
+
+  const pts: Point<any>[] = t.points.map((q) => ({ x: F.deserialize(q.x), y: F.deserialize(q.y) }));
+
+  // The file must not carry two different y for one x, and must not pad itself
+  // with duplicates to look larger than it is.
+  const byX = new Map<string, string>();
+  for (const q of pts) {
+    const kx = F.fmtFull(q.x);
+    const ky = F.fmtFull(q.y);
+    const prev = byX.get(kx);
+    if (prev !== undefined) {
+      return fail(
+        "BAD_POINTS",
+        prev === ky ? `duplicate point at x=${kx}` : `contradictory y values at x=${kx}`,
+      );
+    }
+    byX.set(kx, ky);
+  }
+
+  // The separate `ood` field used to be decorative — altering it changed nothing,
+  // because ledgerPoints() already puts the OOD pair first in `points`. It must
+  // be the same pair the interpolation actually consumes.
+  const oodX = F.deserialize(t.ood.x);
+  const oodY = F.deserialize(t.ood.y);
+  const listedOodY = byX.get(F.fmtFull(oodX));
+  if (listedOodY === undefined) {
+    return fail("BAD_OOD", "the ood point is not among the transcript's points");
+  }
+  if (listedOodY !== F.fmtFull(oodY)) {
+    return fail("BAD_OOD", "the ood y value disagrees with the same x in points");
+  }
+  // rootHint is not decorative either: z is deriveOOD(rootHint), so the pair
+  // (rootHint, ood.x) is checkable from public data alone. Without this, the
+  // rootHint could be swapped for any other key's and the file still verified.
+  if (!F.eq(oodX, deriveOOD(F, t.rootHint, positionDomain(F, p.T)))) {
+    return fail("BAD_OOD", "the ood point is not the one this rootHint derives — rootHint and ood disagree");
+  }
+
   const distinct = dedupeByX(F, pts);
-  const needed = t.params.D + 1;
   if (distinct.length < needed) {
     return {
-      ok: false,
+      ok: false, anchored: false, code: "INSUFFICIENT_POINTS",
       reason: `insufficient points: ${distinct.length} distinct of ${needed} needed`,
-      recoveredFingerprint: null,
-      distinct: distinct.length,
-      needed,
+      recoveredFingerprint: null, distinct: distinct.length, needed,
     };
   }
+
   const recovered = interpolateCoeffs(F, distinct.slice(0, needed));
   const recoveredFingerprint = commit(F, recovered);
-  const ok = recoveredFingerprint === t.fingerprint;
+  if (recoveredFingerprint !== t.fingerprint) {
+    return {
+      ok: false, anchored: false, code: "FINGERPRINT_MISMATCH",
+      reason: "recovered degree-D key does NOT match the fingerprint in this file (over-degree / malicious key, or tampered transcript)",
+      recoveredFingerprint, distinct: distinct.length, needed,
+    };
+  }
+
+  if (expectedFingerprint !== undefined) {
+    if (recoveredFingerprint !== expectedFingerprint) {
+      return {
+        ok: false, anchored: false, code: "ANCHOR_MISMATCH",
+        reason: "the recovered key does not match the expected fingerprint you supplied — this transcript belongs to a different key",
+        recoveredFingerprint, distinct: distinct.length, needed,
+      };
+    }
+    return {
+      ok: true, anchored: true, code: "OK_ANCHORED",
+      reason: "recovered key matches the expected fingerprint supplied independently of this file",
+      recoveredFingerprint, distinct: distinct.length, needed,
+    };
+  }
+
   return {
-    ok,
-    reason: ok
-      ? "recovered key matches the published fingerprint"
-      : "recovered degree-D key does NOT match the fingerprint (over-degree / malicious key, or tampered transcript)",
-    recoveredFingerprint,
-    distinct: distinct.length,
-    needed,
+    ok: true, anchored: false, code: "OK_INTERNALLY_CONSISTENT",
+    reason: "internally consistent: these points interpolate to a key whose hash equals the fingerprint stored in this same file (supply an expected fingerprint to anchor it to a known public key)",
+    recoveredFingerprint, distinct: distinct.length, needed,
   };
 }

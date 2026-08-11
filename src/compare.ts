@@ -47,7 +47,11 @@ export function renderCompare(p: Params): string {
       " ";
   }
 
-  // Jevil step — negligible through n*, vertical jump to 1 at the cliff.
+  // Jevil step — drawn ALONG the axis through n*, then a vertical jump to 1 at
+  // the cliff. sy(0) is the axis, and that is a drawing choice, not a measured
+  // zero: the paper's claim is ~2^-124, which is negligible but not zero and is
+  // indistinguishable from the axis at any pixel resolution on a linear scale.
+  // The legend says so; do not let this line be read as a measured probability.
   const jevil =
     `M${sx(0).toFixed(1)} ${sy(0).toFixed(1)} ` +
     `L${sx(p.nStar).toFixed(1)} ${sy(0).toFixed(1)} ` +
@@ -68,7 +72,7 @@ export function renderCompare(p: Params): string {
 
   return `
   <svg viewBox="0 0 ${W} ${H}" class="cmp-svg" role="img"
-    aria-label="Forgery probability versus number of signatures. A soft few-time signature scheme rises gradually with each signature. Jevil stays negligible through signature ${p.nStar}, then jumps to certain forgery at the cliff, signature ${p.nCliff}.">
+    aria-label="Schematic comparison of forgery probability versus number of signatures. A soft few-time signature scheme rises gradually with each signature, plotted from the HORS bound at this demo's parameters. The Jevil line is drawn along the zero axis through signature ${p.nStar}, because the paper's claimed pre-cliff forgery probability is negligible rather than exactly zero, then jumps to certain forgery at the cliff, signature ${p.nCliff}. Neither line is a measurement of this demo.">
     <line class="cmp-axis" x1="${PADL}" y1="${PADT}" x2="${PADL}" y2="${baseY}"/>
     <line class="cmp-axis" x1="${PADL}" y1="${baseY}" x2="${W - PADR}" y2="${baseY}"/>
     <text class="cmp-axl" x="${PADL - 8}" y="${PADT + 5}" text-anchor="end">1</text>

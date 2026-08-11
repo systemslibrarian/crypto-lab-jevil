@@ -17,6 +17,9 @@ export interface Field<T> {
   readonly name: string;
   /** base-field words consumed per element when sampling from the XOF */
   readonly coords: number;
+  /** number of elements in the field — the page prints exact candidate counts
+   *  from this, so "how many polynomials still fit" is computed, not asserted */
+  readonly size: bigint;
   readonly zero: T;
   readonly one: T;
   /** generator used for the position map psi(i) = generator^i */
@@ -42,6 +45,7 @@ export const GF: Field<bigint> = {
   id: "base",
   name: "Goldilocks F_q₀",
   coords: 1,
+  size: B.Q0,
   zero: 0n,
   one: 1n,
   generator: B.GENERATOR,
@@ -99,6 +103,7 @@ export const GF4: Field<E4> = {
   id: "tower",
   name: "Tower F_{q₀⁴} ≈ 2²⁵⁶",
   coords: 4,
+  size: ORDER4,
   zero: [0n, 0n, 0n, 0n],
   one: [1n, 0n, 0n, 0n],
   generator: [B.GENERATOR, 0n, 0n, 0n], // base generator, embedded
