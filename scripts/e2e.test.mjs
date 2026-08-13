@@ -565,6 +565,14 @@ const hero = (await page.textContent(".cl-hero-why-text")).replace(/\s+/g, " ");
 check("the 124-bit claim is scoped to the paper's full construction",
   /124/.test(hero) && /paper's full construction/i.test(hero));
 
+// The same scoping applies to the social-preview metadata: og:description said
+// "the key is ~124-bit safe" with nothing to hang the number on, and outlived
+// the hero correction. Dropping the number entirely would also pass — what must
+// not ship is an unscoped 124.
+const ogDesc = (await page.getAttribute('meta[property="og:description"]', "content")) ?? "";
+check("the social-preview description scopes any 124-bit claim to the paper",
+  !/124/.test(ogDesc) || /paper/i.test(ogDesc), ogDesc);
+
 // The priority claim is the paper's, and knowledge-scoped.
 const claim = (await page.textContent(".claim")).replace(/\s+/g, " ");
 check("the 'first FTS' priority claim is attributed and knowledge-scoped",

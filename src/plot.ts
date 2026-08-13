@@ -5,8 +5,10 @@
 // curve. So this panel renders the cliff *geometry* in real-number coordinate
 // space — a faithful picture of the underlying fact the scheme exploits:
 //
-//   • below D+1 distinct points, infinitely many degree-D polynomials fit
-//     (we draw several, all passing through the revealed points);
+//   • below D+1 distinct points the polynomial is underdetermined — in the
+//     real-number space drawn here infinitely many curves fit; over the actual
+//     finite field the count is |F|^(D+1−m), large but finite (see lagrange.ts).
+//     We draw several alternatives, all passing through the revealed points;
 //   • at D+1 the polynomial snaps to a unique curve (drawn solid red).
 //
 // The degree D and the revealed-point count are driven by LIVE scheme state, so
