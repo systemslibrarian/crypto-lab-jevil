@@ -42,7 +42,24 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Accessibility gate (axe-core, WCAG A/AA)
+      # scripts/e2e.test.mjs — the browser regression suite. It ran only in
+      # verify.yml, whose header justified the split as "so a flaky browser
+      # install can't block publishing"; that stopped being true the moment
+      # this job started installing Chromium for the step below. It is the only
+      # thing that exercises `npm run verify`, the offline transcript verifier
+      # the README promises, and the accounting identities the page renders.
+      - name: Browser regression suite (built preview)
+        run: |
+          npm run preview -- --port 4675 --strictPort &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4675/crypto-lab-jevil/ >/dev/null && break
+            sleep 1
+          done
+          BASE_URL=http://localhost:4675/crypto-lab-jevil/ npm run test:e2e
+
+      # `test:a11y` is bare `playwright test`, so this also runs claims.spec.ts
+      # and hidden-attribute.spec.ts, not just the axe pass.
+      - name: Browser claims and accessibility gate
         run: npm run test:a11y
 
       - name: Upload Pages artifact
