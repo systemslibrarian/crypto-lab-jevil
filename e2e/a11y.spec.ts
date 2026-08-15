@@ -1,5 +1,11 @@
 import { test } from '@playwright/test';
-import { boot, driveAllStates, NARROW, reportCollected } from './gate';
+import {
+  boot,
+  driveAllStates,
+  expectBaselineNotStale,
+  NARROW,
+  reportCollected,
+} from './gate';
 
 /**
  * WCAG A/AA regression gate. Deploys are already gated on the crypto KATs; this
@@ -20,6 +26,7 @@ for (const theme of ['dark', 'light'] as const) {
     page.setDefaultTimeout(20_000);
     await boot(page, theme);
     await driveAllStates(page, theme);
+    expectBaselineNotStale();
     reportCollected();
   });
 
@@ -29,6 +36,7 @@ for (const theme of ['dark', 'light'] as const) {
     await page.setViewportSize(NARROW);
     await boot(page, theme);
     await driveAllStates(page, `${theme} @380px`);
+    expectBaselineNotStale();
     reportCollected();
   });
 }
