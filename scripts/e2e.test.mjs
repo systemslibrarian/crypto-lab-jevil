@@ -585,13 +585,10 @@ check("the soft-vs-sharp chart is labelled schematic, not measured",
     && /negligible, not zero/i.test(cmpNote)
     && /does not measure a forgery probability/i.test(cmpNote));
 
-// --- theme toggle persistence ---
-const t0 = await page.getAttribute("html", "data-theme");
-await page.click("#cl-theme-toggle");
-const t1 = await page.getAttribute("html", "data-theme");
-check("theme toggles", t0 !== t1);
+// --- dark is the only theme, and it survives a reload ---
+check("no theme toggle is shipped", (await page.locator("#cl-theme-toggle").count()) === 0);
 await page.reload({ waitUntil: "networkidle" });
-check("theme persists across reload", (await page.getAttribute("html", "data-theme")) === t1);
+check("dark theme persists across reload", (await page.getAttribute("html", "data-theme")) === "dark");
 
 check("no console/page errors", errs.length === 0, errs.join("; "));
 await ctx.close();
