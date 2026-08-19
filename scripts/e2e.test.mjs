@@ -586,7 +586,11 @@ check("the soft-vs-sharp chart is labelled schematic, not measured",
     && /does not measure a forgery probability/i.test(cmpNote));
 
 // --- dark is the only theme, and it survives a reload ---
-check("no theme toggle is shipped", (await page.locator("#cl-theme-toggle").count()) === 0);
+// Both ids: the shared header toggle that was removed fleet-wide, and this
+// lab's own older `#theme-toggle`, which stayed fully wired long after the
+// sweep and was inert only because index.html hid it with `display:none`.
+check("no theme toggle is shipped",
+  (await page.locator("#cl-theme-toggle, #theme-toggle, .theme-toggle").count()) === 0);
 await page.reload({ waitUntil: "networkidle" });
 check("dark theme persists across reload", (await page.getAttribute("html", "data-theme")) === "dark");
 

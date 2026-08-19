@@ -122,7 +122,7 @@ a:hover {
 }
 /* Inline links inside running text must be distinguishable without relying on
    color alone (WCAG 1.4.1) — underline them. Block-style links (cards, footer,
-   skip link, theme toggle) keep the clean look. */
+   skip link) keep the clean look. */
 .panel-intro a,
 .note a,
 .escape-note a,
@@ -189,26 +189,6 @@ h3 {
 .cl-hero-sub{font-family:"Fraunces",serif;font-style:italic;color:var(--text-dim);}
 .cl-hero-why-label{color:var(--danger-emph);}
 .cl-hero-why-text{color:var(--text);}
-.theme-toggle {
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 50%;
-  background-color: var(--bg-panel);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-}
-.theme-toggle:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 
 /* --------------------------------------------------------------- panels -- */
 .panels {
@@ -1031,8 +1011,7 @@ input:focus-visible {
 /* Comfortable touch targets (WCAG 2.5.x). */
 .btn,
 select,
-input[type="text"],
-.theme-toggle {
+input[type="text"] {
   min-height: 44px;
 }
 

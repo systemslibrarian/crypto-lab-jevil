@@ -79,7 +79,6 @@ function shell(): string {
   return `
   <main class="panels" id="main-content" tabindex="-1">
   <header class="cl-hero">
-    <button id="theme-toggle" class="theme-toggle" aria-label="Switch to light mode" style="position: absolute; top: 0; right: 0"><span aria-hidden="true">🌙</span></button>
     <div class="cl-hero-main">
       <h1 class="cl-hero-title">Jevil</h1>
       <p class="cl-hero-sub">Few-time signature · degree-D polynomial secret · Goldilocks field</p>
@@ -810,27 +809,6 @@ function boot() {
       e.preventDefault();
       signHonest();
     }
-  });
-
-  // Theme toggle: flip data-theme on <html>, persist, and keep the button's
-  // emoji + aria-label in sync with the active theme. Dark is the default
-  // (set by the anti-flash script in index.html).
-  const html = document.documentElement;
-  const syncThemeButton = (theme: string) => {
-    const btn = $("#theme-toggle");
-    const dark = theme === "dark";
-    btn.innerHTML = `<span aria-hidden="true">${dark ? "🌙" : "☀️"}</span>`;
-    btn.setAttribute(
-      "aria-label",
-      dark ? "Switch to light mode" : "Switch to dark mode",
-    );
-  };
-  syncThemeButton(html.getAttribute("data-theme") ?? "dark");
-  $("#theme-toggle").addEventListener("click", () => {
-    const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    html.setAttribute("data-theme", next);
-    localStorage.setItem("theme", next);
-    syncThemeButton(next);
   });
 
   generate();
