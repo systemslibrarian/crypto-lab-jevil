@@ -350,7 +350,7 @@ function shell(): string {
           <dt>HORS</dt>
           <dd>&ldquo;Hash to Obtain a Random Subset&rdquo; — the scheme family where each signature reveals a hash-selected subset of secret values. FORS, inside SLH-DSA / SPHINCS+, is the <em>soft</em>-failing cousin.</dd>
           <dt>Out-of-domain (OOD) point</dt>
-          <dd>One free evaluation of <code>f</code> published in the key — the head start that fixes the cliff at <code>n*+1</code>.</dd>
+          <dd>One free evaluation of <code>f</code> published in the key — it counts as a revealed point, but it does not move the cliff, which sits at <code>n*+1</code> with or without it.</dd>
           <dt>Degree <code>D</code> &middot; coefficients</dt>
           <dd>The secret is a polynomial <code>f</code> of degree <code>D</code>; its <code>D+1</code> coefficients <em>are</em> the private key.</dd>
           <dt>Lagrange interpolation</dt>
@@ -475,8 +475,10 @@ async function doGenerate() {
       Public out-of-domain freebie&nbsp; <span class="ood-pair">(z=${key.field.fmt(key.ood.x)}, f(z)=${key.field.fmt(key.ood.y)})</span>
       &mdash; one free point on <code>f</code>, baked into the public key. It is
       not decoration: it counts as one of the <code>D+1</code> points an attacker
-      needs, the head start that makes the cliff land at exactly signature
-      <code>n*+1</code>.
+      needs. It does not move the cliff, though &mdash; because <code>M</code> is
+      a multiple of <code>K</code>, <code>n*+1</code> signatures at fresh
+      positions already reveal <code>(n*+1)&middot;K = D+1</code> points on their
+      own (paper, proof of Theorem 2).
     </p>
     <p class="fp-line">
       Public key fingerprint&nbsp;
