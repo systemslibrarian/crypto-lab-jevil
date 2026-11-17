@@ -46,7 +46,9 @@ Scheme"*, Cryptology ePrint Archive Paper 2026/1103,
   (`u⁴ = 7`, the Plonky2 Goldilocks tower). The UI **Field** selector switches
   between them; the cliff recovers exactly over both. (`src/ff.ts`)
 - **SHAKE256 random oracle.** `H_xof` is instantiated with SHAKE256 (paper
-  Table 6) via the audited `@noble/hashes`, squeezed for coefficients, the OOD
+  Table 6) via `@noble/hashes` — pinned `^2.4.0`, later than its one independent
+  audit, "at version 1.0.0, in Jan 2022, independently, by [Cure53]" — squeezed
+  for coefficients, the OOD
   point, and positions, all domain-separated with the paper's tags
   (`JV-SEED`, `JV-OOD`, `JV-POSN`). (`src/hash.ts`)
 - **The secret IS the polynomial.** The secret key is the coefficient vector of

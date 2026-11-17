@@ -1,5 +1,6 @@
 // Correctness test for the Jevil crypto core, over both fields.
 // Run: npm test  (tsx scripts/core.test.ts)
+import { readFileSync } from "node:fs";
 import { GF, GF4, type Field } from "../src/ff";
 import { interpolateCoeffs, coeffsEqual, candidateCount, formatCount } from "../src/lagrange";
 import {
@@ -294,9 +295,46 @@ function main() {
   hiddenClaims();
   oodClaims();
   transcriptClaims();
+  nobleAuditClaims();
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);
+}
+
+// ---- what "audited" covers for the @noble/hashes this lab ships ----
+// KNOWN-GAPS.md said SHAKE256 comes "via the audited `@noble/hashes`", with no
+// version. The library records exactly one independent audit, "at version
+// 1.0.0, in Jan 2022, independently, by [Cure53]", and this lab pins ^2.4.0,
+// which that audit does not cover. Read from the installed package, so an
+// upgrade that changes the record fails here.
+function nobleAuditClaims() {
+  const root = new URL("..", import.meta.url);
+  const read = (rel: string) => readFileSync(new URL(rel, root), "utf8");
+  const flat = (t: string) => t.replace(/\s+/g, " ");
+
+  const pinned = JSON.parse(read("package.json")).dependencies["@noble/hashes"];
+  check("@noble/hashes is pinned at ^2.4.0", pinned === "^2.4.0");
+
+  const readme = read("node_modules/@noble/hashes/README.md");
+  check(
+    "the library still records its one audit at version 1.0.0 (Cure53, Jan 2022)",
+    /at version 1\.0\.0, in Jan 2022, independently, by \[Cure53\]/.test(readme),
+  );
+  check(
+    "no 2.x release of @noble/hashes has been audited",
+    !/at version 2\.\d+\.\d+, in [A-Z]/.test(readme),
+  );
+
+  const gaps = flat(read("KNOWN-GAPS.md"));
+  check(
+    "KNOWN-GAPS no longer calls the shipped library simply audited",
+    !gaps.includes("via the audited `@noble/hashes`"),
+  );
+  check(
+    "KNOWN-GAPS names the audited version",
+    gaps.includes("at version 1.0.0, in Jan 2022, independently, by [Cure53]") &&
+      gaps.includes("pinned `^2.4.0`"),
+  );
 }
 
 main();
