@@ -1,7 +1,18 @@
 // Browser-level regression suite for the Jevil demo.
 //
-//   npm run test:e2e                 # against the dev server (localhost:5173)
+//   npm run test:e2e                 # starts its own preview server and uses it
 //   BASE_URL=… npm run test:e2e      # against any base URL (CI uses preview)
+//
+// WHY IT SERVES ITSELF. This used to default to http://localhost:5173/, vite's
+// shared default port, and assume a dev server was already up. Nothing checked
+// WHOSE. On 2026-11-17 port 5173 was held by an unrelated project in a sibling
+// directory (TruePad's `vite --port 5173 --strictPort`); it answered the goto,
+// returned 404 for /crypto-lab-jevil/, and the run died 30s later waiting for
+// `#key-out` — reading exactly like a page that had stopped generating a key.
+// A harness that cannot tell "my app is broken" from "I am talking to someone
+// else's server" reports the wrong failure, so this now does both: it starts
+// the server it tests when BASE_URL is unset, and it refuses to assert anything
+// until it has confirmed the document it loaded is this lab's.
 //
 // Covers the load-bearing states: honest recovery, the grind, duplicate-point
 // handling, the malicious escape, the tower field, K=16 security grade, the
@@ -18,8 +29,8 @@
 // tampered transcript) and the README-promised offline `npm run verify` CLI.
 import { chromium, devices } from "playwright";
 import { AxeBuilder } from "@axe-core/playwright";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +39,54 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TSX = join(REPO, "node_modules", ".bin", "tsx");
 const WORK = mkdtempSync(join(tmpdir(), "jevil-e2e-"));
 
-const URL = process.env.BASE_URL || "http://localhost:5173/crypto-lab-jevil/";
+/* The port CI uses, so a local run and a CI run exercise the same address.
+ * strictPort means a collision fails loudly here instead of quietly testing
+ * whatever else is listening. */
+const OWN_PORT = 4675;
+const URL = process.env.BASE_URL || `http://localhost:${OWN_PORT}/crypto-lab-jevil/`;
+/* Only a server we started is ours to stop, and only by its own pid — the
+ * fleet rule against pattern-killing exists because `pkill -f vite` on this
+ * machine takes out sibling sessions' servers mid-run. */
+let ownServer = null;
+
+async function reachable(url) {
+  try {
+    const r = await fetch(url, { redirect: "follow" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function startOwnServer() {
+  if (!existsSync(join(REPO, "dist", "index.html"))) {
+    const built = spawnSync("npm", ["run", "build"], { cwd: REPO, encoding: "utf8" });
+    if (built.status !== 0) {
+      console.error("FAIL  could not build before starting the preview server");
+      console.error((built.stdout ?? "") + (built.stderr ?? ""));
+      process.exit(1);
+    }
+  }
+  const child = spawn("npm", ["run", "preview", "--", "--port", String(OWN_PORT), "--strictPort"], {
+    cwd: REPO,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let log = "";
+  child.stdout.on("data", (d) => (log += d));
+  child.stderr.on("data", (d) => (log += d));
+  for (let i = 0; i < 60; i++) {
+    if (await reachable(URL)) return child;
+    if (child.exitCode !== null) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  console.error(`FAIL  preview server did not come up on port ${OWN_PORT} within 30s.`);
+  console.error("      --strictPort refuses to move, so this is a port collision or a build fault:");
+  console.error(log.trim() || "      (the server printed nothing)");
+  try {
+    if (child.exitCode === null) process.kill(child.pid);
+  } catch {}
+  process.exit(1);
+}
 let fails = 0;
 const check = (n, c, x = "") => {
   console.log(`${c ? "  ok  " : " FAIL "} ${n}${x ? " — " + x : ""}`);
@@ -196,13 +254,35 @@ function runVerifyCli(file, expectedFingerprint) {
   return { code: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 
+if (!process.env.BASE_URL) ownServer = await startOwnServer();
+
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1000, height: 1500 } });
 const page = await ctx.newPage();
 const errs = [];
 page.on("console", (m) => m.type() === "error" && errs.push(m.text()));
 page.on("pageerror", (e) => errs.push(String(e)));
-await page.goto(URL, { waitUntil: "networkidle" });
+const response = await page.goto(URL, { waitUntil: "networkidle" });
+
+/* IDENTITY, before any assertion. A goto that lands on someone else's server
+ * still "succeeds", and every check after it then describes their page. This
+ * names the mismatch instead of letting it surface 30s later as a missing
+ * selector. */
+{
+  const status = response?.status() ?? 0;
+  const title = await page.title();
+  const hasApp = (await page.locator("#key-out").count()) > 0;
+  if (status >= 400 || !hasApp) {
+    console.error(`FAIL  ${URL} did not serve this lab.`);
+    console.error(`      HTTP ${status}; document title ${JSON.stringify(title)}; ` +
+      `#key-out ${hasApp ? "present" : "absent"}.`);
+    console.error("      Something else is listening on that port, or the build is not this lab's.");
+    console.error("      Run without BASE_URL to let this suite start and own its own server.");
+    await browser.close();
+    if (ownServer?.exitCode === null) process.kill(ownServer.pid);
+    process.exit(1);
+  }
+}
 
 // --- boot + a11y baseline ---
 check("auto-generates a key on load", !(await page.locator("#key-out").getAttribute("class")).includes("hidden"));
@@ -607,5 +687,7 @@ await scan(mp, "mobile/fresh");
 await mctx.close();
 
 await browser.close();
+/* By pid, and only the child this process started. */
+if (ownServer?.exitCode === null) process.kill(ownServer.pid);
 console.log(fails === 0 ? "\nE2E ALL PASS" : `\n${fails} FAILURE(S)`);
 process.exit(fails === 0 ? 0 : 1);
