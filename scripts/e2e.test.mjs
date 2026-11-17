@@ -39,10 +39,13 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TSX = join(REPO, "node_modules", ".bin", "tsx");
 const WORK = mkdtempSync(join(tmpdir(), "jevil-e2e-"));
 
-/* The port CI uses, so a local run and a CI run exercise the same address.
- * strictPort means a collision fails loudly here instead of quietly testing
- * whatever else is listening. */
-const OWN_PORT = 4675;
+/* This lab's own port in the fleet registry, crypto-lab/tools/playwright-ports.json.
+ * It was 4675 here and in deploy.yml, which the registry assigns to
+ * crypto-lab-saml-binding — harmless in CI, where each job has the machine to
+ * itself, and exactly the collision this file exists to prevent when both labs
+ * are previewed on one workstation. strictPort means a collision fails loudly
+ * instead of quietly testing whatever else is listening. */
+const OWN_PORT = 4654;
 const URL = process.env.BASE_URL || `http://localhost:${OWN_PORT}/crypto-lab-jevil/`;
 /* Only a server we started is ours to stop, and only by its own pid — the
  * fleet rule against pattern-killing exists because `pkill -f vite` on this
