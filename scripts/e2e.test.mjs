@@ -30,6 +30,7 @@
 import { chromium, devices } from "playwright";
 import { AxeBuilder } from "@axe-core/playwright";
 import { spawn, spawnSync } from "node:child_process";
+import net from "node:net";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -52,6 +53,33 @@ const URL = process.env.BASE_URL || `http://localhost:${OWN_PORT}/crypto-lab-jev
  * machine takes out sibling sessions' servers mid-run. */
 let ownServer = null;
 
+/* Only a server we started is ours to stop, and only by its own process group --
+ * the fleet rule against pattern-killing exists because `pkill -f vite` on this
+ * machine takes out sibling sessions' servers mid-run.
+ * It returns only once the port is FREE: a sent signal is not a released port,
+ * and the next CI step needs the port, not the intention. */
+function portFree(port) {
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ port, host: "127.0.0.1" });
+    sock.on("connect", () => { sock.destroy(); resolve(false); });
+    sock.on("error", () => resolve(true));
+  });
+}
+
+async function stopOwnServer() {
+  const child = ownServer;
+  ownServer = null;
+  if (!child || child.exitCode !== null) return;
+  for (const sig of ["SIGTERM", "SIGKILL"]) {
+    try { process.kill(-child.pid, sig); } catch { try { process.kill(child.pid, sig); } catch {} }
+    for (let i = 0; i < 40; i++) {
+      if (await portFree(OWN_PORT)) return;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  console.error(`WARN  port ${OWN_PORT} is still held after SIGTERM and SIGKILL.`);
+}
+
 async function reachable(url) {
   try {
     const r = await fetch(url, { redirect: "follow" });
@@ -73,7 +101,12 @@ async function startOwnServer() {
   const child = spawn("npm", ["run", "preview", "--", "--port", String(OWN_PORT), "--strictPort"], {
     cwd: REPO,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
   });
+  /* Published BEFORE the first await: a signal arriving between spawn and the
+   * assignment at the call site would otherwise leave this handle null and
+   * orphan the server -- the defect this whole change exists to end. */
+  ownServer = child;
   let log = "";
   child.stdout.on("data", (d) => (log += d));
   child.stderr.on("data", (d) => (log += d));
@@ -85,9 +118,7 @@ async function startOwnServer() {
   console.error(`FAIL  preview server did not come up on port ${OWN_PORT} within 30s.`);
   console.error("      --strictPort refuses to move, so this is a port collision or a build fault:");
   console.error(log.trim() || "      (the server printed nothing)");
-  try {
-    if (child.exitCode === null) process.kill(child.pid);
-  } catch {}
+  await stopOwnServer();
   process.exit(1);
 }
 let fails = 0;
@@ -257,7 +288,11 @@ function runVerifyCli(file, expectedFingerprint) {
   return { code: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 
-if (!process.env.BASE_URL) ownServer = await startOwnServer();
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, () => { stopOwnServer().finally(() => process.exit(130)); });
+}
+
+if (!process.env.BASE_URL) await startOwnServer();
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1000, height: 1500 } });
@@ -282,7 +317,7 @@ const response = await page.goto(URL, { waitUntil: "networkidle" });
     console.error("      Something else is listening on that port, or the build is not this lab's.");
     console.error("      Run without BASE_URL to let this suite start and own its own server.");
     await browser.close();
-    if (ownServer?.exitCode === null) process.kill(ownServer.pid);
+    await stopOwnServer();
     process.exit(1);
   }
 }
@@ -690,7 +725,6 @@ await scan(mp, "mobile/fresh");
 await mctx.close();
 
 await browser.close();
-/* By pid, and only the child this process started. */
-if (ownServer?.exitCode === null) process.kill(ownServer.pid);
+await stopOwnServer();
 console.log(fails === 0 ? "\nE2E ALL PASS" : `\n${fails} FAILURE(S)`);
 process.exit(fails === 0 ? 0 : 1);

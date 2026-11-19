@@ -66,14 +66,27 @@ jobs:
       # this job started installing Chromium for the step below. It is the only
       # thing that exercises `npm run verify`, the offline transcript verifier
       # the README promises, and the accounting identities the page renders.
+      # No BASE_URL, deliberately: the suite then starts the preview server AND
+      # STOPS IT, which this step could not do. Started here with `&`, the server
+      # outlived the step -- `playwright test` below wants the same 4654 for its
+      # own webServer with reuseExistingServer false on CI, so it exited with
+      # "http://localhost:4654 is already used" and nothing published from
+      # 2026-11-17 12:07 GMT until this commit. It only became reachable when
+      # b42c738 moved this step from 4675 onto the suite's own port; before that
+      # the two never met, which is why it looked harmless.
       - name: Browser regression suite (built preview)
+        run: npm run test:e2e
+
+      # A sent signal is not a released port, and killing npm does not always
+      # take vite with it. Ask the PORT, so a regression here fails as itself
+      # rather than as an unrelated gate failure in the step below.
+      - name: The preview port is free again
         run: |
-          npm run preview -- --port 4654 --strictPort &
-          for i in $(seq 1 60); do
-            curl -sf http://localhost:4654/crypto-lab-jevil/ >/dev/null && break
-            sleep 1
-          done
-          BASE_URL=http://localhost:4654/crypto-lab-jevil/ npm run test:e2e
+          if nc -z localhost 4654; then
+            echo "::error::port 4654 is still held after the regression suite"
+            exit 1
+          fi
+          echo "port 4654 is free"
 
       # `test:a11y` is bare `playwright test`, so this also runs claims.spec.ts
       # and hidden-attribute.spec.ts, not just the axe pass.
