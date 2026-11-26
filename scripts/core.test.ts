@@ -298,6 +298,7 @@ function main() {
   oodClaims();
   transcriptClaims();
   nobleAuditClaims();
+  signingStateBoundaryClaims();
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);
@@ -336,6 +337,38 @@ function nobleAuditClaims() {
     "KNOWN-GAPS names the audited version",
     gaps.includes("at version 1.0.0, in Jan 2022, independently, by [Cure53]") &&
       gaps.includes("pinned `^2.4.0`"),
+  );
+}
+
+// The paper's Corollary 1 says recovering c=f is not by itself enough to sign:
+// its zk-WHIR knowledge extractor must also recover rzk so the commitment state
+// can be rebuilt. Keep the geometry demo from silently turning polynomial
+// recovery into a stronger full-scheme forgery claim.
+function signingStateBoundaryClaims() {
+  const root = new URL("..", import.meta.url);
+  const read = (rel: string) => readFileSync(new URL(rel, root), "utf8");
+  const mainSource = read("src/main.ts");
+  const readme = read("README.md");
+  const gaps = read("KNOWN-GAPS.md");
+
+  check(
+    "student lesson says f alone is not enough for a full Jevil forgery",
+    mainSource.includes("f</code> alone is not enough to forge an accepted signature") &&
+      mainSource.includes("commitment randomness"),
+  );
+  check(
+    "README scopes the live recovery to the secret polynomial",
+    readme.includes("secret polynomial reconstructed live") &&
+      readme.includes("f` alone is not yet a signing key"),
+  );
+  check(
+    "known gaps records the (c, rzk) extraction boundary",
+    gaps.includes("recover `(c, rzk)`") &&
+      /not a complete\s+full-scheme signing-key extraction/.test(gaps),
+  );
+  check(
+    "retired f-alone forgery claim does not return",
+    !mainSource.includes("Whoever holds <code>f</code> can now forge a valid signature"),
   );
 }
 

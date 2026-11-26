@@ -51,9 +51,14 @@ Scheme"*, Cryptology ePrint Archive Paper 2026/1103,
   for coefficients, the OOD
   point, and positions, all domain-separated with the paper's tags
   (`JV-SEED`, `JV-OOD`, `JV-POSN`). (`src/hash.ts`)
-- **The secret IS the polynomial.** The secret key is the coefficient vector of
-  a random polynomial of degree at most `D` `f`, with `M = (n*+1)·K` coefficients,
-  `D = M−1` (paper §4.1, Construction 1). (`src/jevil.ts`, `src/hash.ts`)
+- **The recovered cliff object is the polynomial.** The demo treats the
+  coefficient vector of a random polynomial `f` of degree at most `D`, with
+  `M = (n*+1)·K` coefficients and `D = M−1`, as its secret object. In the paper,
+  `sk` is the 32-byte seed and recovering `f` alone does not produce accepted
+  zk-WHIR proofs. Corollary 1 additionally uses the knowledge extractor to
+  recover `(c, rzk)` and rebuild the commitment state. This repo omits that
+  layer, so its exact-match verdict proves polynomial recovery, not a complete
+  full-scheme signing-key extraction. (`src/jevil.ts`, `src/hash.ts`)
 - **Hash-derived positions.** Each signature reveals `K` evaluations of `f` at
   positions `xₜ = g^{iₜ}` where the indices `iₜ` are derived from the message by
   a random oracle — the HORS "Hash to Obtain Random Subset" idea

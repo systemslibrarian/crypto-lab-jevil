@@ -82,7 +82,7 @@ function shell(): string {
     <div class="cl-hero-main">
       <h1 class="cl-hero-title">Jevil</h1>
       <p class="cl-hero-sub">Few-time signature · degree-D polynomial secret · Goldilocks field</p>
-      <p class="cl-hero-desc">Sign messages that reveal evaluations of a secret degree-D polynomial, then watch anyone Lagrange-interpolate the whole secret key the instant the distinct revealed points reach D+1.</p>
+      <p class="cl-hero-desc">Sign messages that reveal evaluations of a secret degree-D polynomial, then watch anyone Lagrange-interpolate that whole polynomial the instant the distinct revealed points reach D+1.</p>
     </div>
     <aside class="cl-hero-why" aria-label="Why it matters">
       <span class="cl-hero-why-label">WHY IT MATTERS</span>
@@ -93,7 +93,7 @@ function shell(): string {
     <section class="panel" id="panel-key">
       <div class="panel-head"><span class="panel-num" aria-hidden="true">01</span><h2>Generate a key</h2></div>
       <p class="panel-intro">
-        The secret key is the coefficient vector of a random polynomial of degree at most <code>D</code> <code>f</code>. <strong>The coefficients are the secret.</strong>
+        This demo's secret object is the coefficient vector of a random polynomial of degree at most <code>D</code> <code>f</code>. <strong>The coefficients are the secret polynomial.</strong>
         The budget <code>n*</code> fixes how many times it is safe to sign.
       </p>
       <div class="controls">
@@ -220,12 +220,15 @@ function shell(): string {
     <section class="panel danger-panel hidden" id="panel-recover">
       <div class="panel-head"><span class="panel-num" aria-hidden="true">04</span><h2>Secret recovered</h2></div>
       <p class="panel-intro">
-        The key the signer believed was private, reconstructed from public data
-        alone. Recovered coefficients (left) vs. the true secret (right),
+        The polynomial the signer believed was private, reconstructed from public
+        evaluation data alone. Recovered coefficients (left) vs. the true polynomial (right),
         compared row by row — live, in your browser.
-        <strong>Whoever holds <code>f</code> can now forge a valid signature on
-        any message</strong>: the recoverer has become the signer. The private
-        key is public, and the signer can never take it back.
+        <strong>In this stripped-down geometry demo, whoever holds <code>f</code>
+        can compute the evaluation data for any message.</strong> In full Jevil,
+        <code>f</code> alone is not enough to forge an accepted signature: the
+        paper's Corollary&nbsp;1 also requires the zk-WHIR extractor to recover
+        the commitment randomness <code>r<sub>zk</sub></code> so the commitment
+        state can be rebuilt. This page omits that proof system.
       </p>
       <div id="recover-out"></div>
     </section>
@@ -296,8 +299,9 @@ function shell(): string {
         Jevil relocates the consequence <strong>into the cryptographic object</strong>.
         Oversigning doesn't fail quietly and against the verifier — it fails
         <strong class="danger-text">loudly and against the signer</strong>. The
-        moment the budget is exceeded, the private key becomes computable by
-        anyone watching, an event detectable by everyone. The penalty lands on the
+        moment the cliff is reached, the secret polynomial becomes computable by
+        anyone watching. In the full construction, the paper's extractor also
+        recovers the commitment state needed to sign. The penalty lands on the
         party that broke the rule.
       </p>
       <p>That trade is useful wherever a hard signing cap is the security property:</p>
@@ -351,13 +355,13 @@ function shell(): string {
           <dt>Out-of-domain (OOD) point</dt>
           <dd>One free evaluation of <code>f</code> published in the key — it counts as a revealed point, but it does not move the cliff, which sits at <code>n*+1</code> with or without it.</dd>
           <dt>Degree <code>D</code> &middot; coefficients</dt>
-          <dd>The secret is a polynomial <code>f</code> of degree at most <code>D</code>; its <code>D+1</code> coefficients <em>are</em> the private key.</dd>
+          <dd>The demo's recovered secret object is a polynomial <code>f</code> of degree at most <code>D</code>. Full Jevil stores a 32-byte seed and also needs zk-WHIR commitment state to sign.</dd>
           <dt>Lagrange interpolation</dt>
           <dd>The standard method to reconstruct the unique polynomial of degree at most <code>D</code> through <code>D+1</code> distinct points — the engine of the cliff.</dd>
           <dt>Goldilocks field</dt>
           <dd>Arithmetic modulo the prime <code>q&#8320; = 2&#8310;&#8308; &minus; 2&#179;&#178; + 1</code>; every number here lives in it.</dd>
           <dt>Forgery &middot; EUF-CMA</dt>
-          <dd>Producing a valid signature on a message you were never authorized to sign. Recovering <code>f</code> makes forgery trivial.</dd>
+          <dd>Producing a valid signature on a message you were never authorized to sign. Recovering <code>f</code> supplies the evaluations; full Jevil's extractor must also recover commitment state before it can forge accepted proofs.</dd>
           <dt>Post-quantum &middot; transparent</dt>
           <dd>Secure against quantum computers (hash-based, no number theory) and requiring no trusted setup.</dd>
           <dt>zk-WHIR commitment</dt>
