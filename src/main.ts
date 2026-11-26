@@ -378,7 +378,7 @@ function shell(): string {
           <strong>SPHINCS Ledger</strong><span>SLH-DSA / FORS &mdash; the <em>soft</em>-degradation counterpoint.</span></a>
         <a class="related-card" href="https://systemslibrarian.github.io/crypto-lab-kyber-vault/" target="_blank" rel="noopener">
           <strong>Kyber Vault</strong><span>ML-KEM key encapsulation, visualized.</span></a>
-        <a class="related-card" href="https://systemslibrarian.github.io/" target="_blank" rel="noopener">
+        <a class="related-card" href="https://crypto-lab.systemslibrarian.dev/" target="_blank" rel="noopener">
           <strong>Crypto-Lab</strong><span>The full suite of interactive demos.</span></a>
       </nav>
     </section>
