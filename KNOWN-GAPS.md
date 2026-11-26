@@ -3,7 +3,7 @@
 This demo exists to make **one idea** tangible: Jevil's *catastrophic cliff*.
 From the revealed evaluations alone, fewer than `D+1` distinct points leave a
 degree-`D` polynomial **algebraically underdetermined** — with `m` distinct
-points exactly `|F|^(D+1−m)` degree-`D` polynomials fit, and those equations rank
+points exactly `|F|^(D+1−m)` polynomials of degree at most `D` fit, and those equations rank
 every one of them equally. At `D+1` that count collapses to one answer anyone can
 reconstruct. That fact is implemented for real. A working signature scheme it is
 **not**.
@@ -52,7 +52,7 @@ Scheme"*, Cryptology ePrint Archive Paper 2026/1103,
   point, and positions, all domain-separated with the paper's tags
   (`JV-SEED`, `JV-OOD`, `JV-POSN`). (`src/hash.ts`)
 - **The secret IS the polynomial.** The secret key is the coefficient vector of
-  a random degree-`D` polynomial `f`, with `M = (n*+1)·K` coefficients,
+  a random polynomial of degree at most `D` `f`, with `M = (n*+1)·K` coefficients,
   `D = M−1` (paper §4.1, Construction 1). (`src/jevil.ts`, `src/hash.ts`)
 - **Hash-derived positions.** Each signature reveals `K` evaluations of `f` at
   positions `xₜ = g^{iₜ}` where the indices `iₜ` are derived from the message by

@@ -118,10 +118,28 @@ async function exportTranscript(page: Page): Promise<{ text: string; cls: string
 
 // ─── 1. The headline verdict, anchored to numbers the page computed ──────────
 
+test('three points leave one free coefficient in the selected field', async ({ page }) => {
+  const q = (1n << 64n) - (1n << 32n) + 1n;
+  await page.goto('.');
+  for (const [field, exponent] of [['base', 1], ['tower', 4]] as const) {
+    await generate(page, { nStar: 1, K: 2, field });
+    await page.fill('#msg', 'Library opens at ten');
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await page.click('#btn-sign');
+      await expect(page.locator('.led-tag').filter({ hasText: /^signature #/ })).toHaveCount(repeat + 1);
+      await expect(page.locator('#meter-count')).toHaveText('3 / 4');
+      await expect(page.locator('#cliff-status')).toContainText(
+        `Exactly ${q}^${exponent} polynomials of degree at most 3`,
+      );
+      await expect(page.locator('#plot-candidates')).toContainText(`${q}^${exponent}`);
+    }
+  }
+});
+
 /**
  * "How many polynomials still fit" is a COMPUTATION, and the page prints it.
  * It used to print the word "infinitely", which is false in a finite field —
- * with m distinct points exactly |F|^(D+1-m) degree-D polynomials fit. This
+ * with m distinct points exactly |F|^(D+1-m) polynomials of degree at most D fit. This
  * recomputes that from the page's own D and point count, at two different point
  * counts, and fails if the sweep never moves.
  */
@@ -130,21 +148,19 @@ test('the number of polynomials still fitting is |F|^(D+1-m), recomputed', async
   await generate(page, { nStar: 2, K: 3 });
   const p = await params(page);
 
-  // q0 = 2^64 - 2^32 + 1, so |F|^k has floor(log2) = 64k - 1.
-  const Q0 = (1n << 64n) - (1n << 32n) + 1n;
-  const expectedBits = (distinct: number): bigint =>
-    BigInt((Q0 ** BigInt(p.D + 1 - distinct)).toString(2).length - 1);
+  const q = (1n << 64n) - (1n << 32n) + 1n;
+  const expectedCount = (distinct: number) => q ** BigInt(p.D + 1 - distinct);
   const readCount = async (): Promise<bigint> => {
-    const m = /Exactly 2\^(\d+) degree-(\d+) polynomials/.exec(await text(page, '#cliff-status'));
-    expect(m, 'the status must print a concrete candidate count').not.toBeNull();
-    expect(Number(m![2]), 'the count must be about the advertised degree').toBe(p.D);
-    return BigInt(m![1]);
+    const m = /Exactly (\d+)\^(\d+) polynomials of degree at most (\d+)/.exec(await text(page, '#cliff-status'));
+    expect(m, 'the status must print an exact field power').not.toBeNull();
+    expect(Number(m![3])).toBe(p.D);
+    return BigInt(m![1]) ** BigInt(m![2]);
   };
 
   const fresh = await meter(page);
   expect(fresh.distinct).toBe(1);
   const first = await readCount();
-  expect(first, 'with the free OOD point alone, |F|^D polynomials fit').toBe(expectedBits(1));
+  expect(first, 'with the free OOD point alone, |F|^D polynomials fit').toBe(expectedCount(1));
 
   await page.fill('#msg', 'candidate-count-probe');
   await page.click('#btn-sign');
@@ -153,12 +169,12 @@ test('the number of polynomials still fitting is |F|^(D+1-m), recomputed', async
   expect(mid.distinct, 'the probe signature must reveal fresh points').toBeGreaterThan(1);
 
   const second = await readCount();
-  expect(second, `candidates at ${mid.distinct} points`).toBe(expectedBits(mid.distinct));
+  expect(second, `candidates at ${mid.distinct} points`).toBe(expectedCount(mid.distinct));
   expect(second, 'the count must SHRINK as points accumulate').toBeLessThan(first);
 
   // At the cliff there is exactly one, so the status must stop offering alternatives.
   await grindToCliff(page);
-  expect(await text(page, '#cliff-status')).not.toMatch(/Exactly 2\^/);
+  expect(await text(page, '#cliff-status')).not.toMatch(/Exactly \d+\^/);
   expect(await text(page, '#cliff-status')).toMatch(/Secret recovered/i);
 });
 

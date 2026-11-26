@@ -18,7 +18,7 @@ import {
   type JevilKey,
   type CliffStatus,
 } from "./jevil";
-import { candidateCount, formatCount } from "./lagrange";
+import { formatCount } from "./lagrange";
 import { renderPlot } from "./plot";
 import { renderCompare } from "./compare";
 
@@ -93,8 +93,7 @@ function shell(): string {
     <section class="panel" id="panel-key">
       <div class="panel-head"><span class="panel-num" aria-hidden="true">01</span><h2>Generate a key</h2></div>
       <p class="panel-intro">
-        The secret key is the coefficient vector of a random degree-<code>D</code>
-        polynomial <code>f</code>. <strong>The coefficients are the secret.</strong>
+        The secret key is the coefficient vector of a random polynomial of degree at most <code>D</code> <code>f</code>. <strong>The coefficients are the secret.</strong>
         The budget <code>n*</code> fixes how many times it is safe to sign.
       </p>
       <div class="controls">
@@ -176,7 +175,7 @@ function shell(): string {
         <strong>From the revealed evaluations alone</strong>, fewer than
         <code>D+1</code> distinct points do not determine <code>f</code>: with
         <code>m</code> distinct points, exactly
-        <code>|F|<sup>D+1&minus;m</sup></code> degree-<code>D</code> polynomials fit
+        <code>|F|<sup>D+1&minus;m</sup></code> polynomials of degree at most <code>D</code> fit
         them &mdash; a large finite number, not &ldquo;infinitely many&rdquo;; this
         is a finite field &mdash; and those equations rank every one equally. Reach
         <code>D+1</code> and that count collapses to <strong>one</strong>: the
@@ -209,7 +208,7 @@ function shell(): string {
         <figcaption class="plot-caption">
           Gold hollow dot = the out-of-domain freebie baked into the public key.
           Red dots = points revealed by signatures. Below the cliff, several
-          degree-<code>D</code> curves fit the same points — the secret is one of
+          curves of degree at most <code>D</code> fit the same points — the secret is one of
           <span id="plot-candidates">many</span>. At <code>D+1</code> points they
           collapse to one. The
           curve shapes are an illustration; the binding proof is the exact
@@ -352,9 +351,9 @@ function shell(): string {
           <dt>Out-of-domain (OOD) point</dt>
           <dd>One free evaluation of <code>f</code> published in the key — it counts as a revealed point, but it does not move the cliff, which sits at <code>n*+1</code> with or without it.</dd>
           <dt>Degree <code>D</code> &middot; coefficients</dt>
-          <dd>The secret is a polynomial <code>f</code> of degree <code>D</code>; its <code>D+1</code> coefficients <em>are</em> the private key.</dd>
+          <dd>The secret is a polynomial <code>f</code> of degree at most <code>D</code>; its <code>D+1</code> coefficients <em>are</em> the private key.</dd>
           <dt>Lagrange interpolation</dt>
-          <dd>The standard method to reconstruct the unique degree-<code>D</code> polynomial through <code>D+1</code> points — the engine of the cliff.</dd>
+          <dd>The standard method to reconstruct the unique polynomial of degree at most <code>D</code> through <code>D+1</code> distinct points — the engine of the cliff.</dd>
           <dt>Goldilocks field</dt>
           <dd>Arithmetic modulo the prime <code>q&#8320; = 2&#8310;&#8308; &minus; 2&#179;&#178; + 1</code>; every number here lives in it.</dd>
           <dt>Forgery &middot; EUF-CMA</dt>
@@ -458,7 +457,7 @@ async function doGenerate() {
         actually degree <code>${trueDeg}</code> (${p.M + boost} coefficients).
         Nothing here forces the signer to be honest — the real scheme's zk-WHIR
         commitment does. Watch the cliff <em>fail to recover</em> in panel 04.</p>`
-    : `<p class="secret-line">Secret: a degree-${p.D} polynomial &mdash; ${p.M}
+    : `<p class="secret-line">Secret: a polynomial of degree at most ${p.D} &mdash; ${p.M}
         hidden coefficients over ${fieldNote}.</p>`;
 
   $("#key-out").classList.remove("hidden");
@@ -627,15 +626,10 @@ function update() {
   grind.disabled = cliff.reached;
   grind.setAttribute("aria-disabled", String(cliff.reached));
 
-  // How many degree-D polynomials still fit the revealed evaluations. Computed
-  // from the live field size and point count — the page used to say "infinitely
-  // many", which is false in a finite field, and printed it unconditionally.
-  const candidates = candidateCount(key.field, key.params.D, cliff.distinct);
-  const candText = cliff.distinct >= cliff.needed
-    ? "exactly one"
-    : `${formatCount(candidates)} of them`;
+  const freeCoefficients = Math.max(0, key.params.D + 1 - cliff.distinct);
+  const count = formatCount(key.field, freeCoefficients);
   const pc = document.getElementById("plot-candidates");
-  if (pc) pc.textContent = candText;
+  if (pc) pc.textContent = freeCoefficients === 0 ? "exactly one" : `${count} candidates`;
 
   // Status callout.
   const status = $("#cliff-status");
@@ -655,8 +649,8 @@ function update() {
     const left = cliff.needed - cliff.distinct;
     status.innerHTML =
       `&#128274; <strong>Algebraically underdetermined.</strong> ${cliff.distinct} of ${cliff.needed} ` +
-      `points &mdash; ${left} short. Exactly ${formatCount(candidates)} degree-${key.params.D} ` +
-      `polynomials still fit these evaluations.`;
+      `points &mdash; ${left} short. Exactly ${count} polynomials of degree at most ${key.params.D} ` +
+      `still fit these evaluations.`;
   }
 
   // Plot.

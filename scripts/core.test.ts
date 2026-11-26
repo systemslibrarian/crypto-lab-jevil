@@ -118,7 +118,9 @@ function hiddenClaims() {
     "candidateCount is FINITE — 'infinitely many' is false in a finite field",
     candidateCount(GF, p.D, 1) === Q0 ** 11n && candidateCount(GF, p.D, 1) < 2n ** 1024n,
   );
-  check("formatCount renders a power of two", formatCount(2n ** 127n) === "2^127");
+  check("formatCount uses the exact field order", formatCount(GF, 11) === `${Q0}^11`);
+  check("formatCount includes the tower degree", formatCount(GF4, 11) === `${Q0}^44`);
+  check("zero free coefficients leave one candidate", formatCount(GF4, 0) === "1");
 
   // An unbounded adversary CAN pick f out using only the published fingerprint —
   // no signatures, no revealed points. Run at a seed size small enough to
