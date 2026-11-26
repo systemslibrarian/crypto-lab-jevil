@@ -3,14 +3,18 @@
 ## What It Is
 
 **Jevil** is a *few-time signature* (FTS) scheme — a digital signature whose key
-is only safe to use a fixed number of times, `n*`. Its secret key is the
+is only safe to use a fixed number of times, `n*`. Its cliff target is the
 coefficient vector of a random degree-`D` polynomial `f` over the 64-bit
 Goldilocks field; each signature reveals `K` hash-derived evaluations of `f`
 (the HORS "hash to obtain a random subset" idea), and the public key ships one
 free out-of-domain evaluation. The problem it solves is *enforcing a hard signing
 cap*: unlike HORS-family schemes (FORS in SLH-DSA) that degrade softly, Jevil
 fails off a **cliff** — the moment the distinct revealed points cross `D+1`,
-anyone can Lagrange-interpolate the whole secret key in `O(D²)` field operations.
+anyone can Lagrange-interpolate the whole secret polynomial in `O(D²)` field operations.
+In the full paper, `f` alone is not yet a signing key: Corollary 1 also invokes
+the zk-WHIR knowledge extractor to recover the commitment randomness needed to
+rebuild signing state. This repo omits that proof system and demonstrates the
+polynomial cliff only.
 It is **post-quantum** (hash-based, no number-theoretic hardness) and
 **transparent** (no trusted setup); it is *not* an encryption scheme and, as
 realized in this repo, it demonstrates the cliff *geometry* rather than the full
@@ -45,7 +49,7 @@ advice.
 Generate a key, then either **Sign (honest)** a message or **Grind toward
 cliff** — the adversarial mode that packs the public ledger with disjoint
 points as fast as possible. Watch the distinct-point meter climb and, the
-instant it reaches `D+1`, see the secret key reconstructed live from public data
+instant it reaches `D+1`, see the secret polynomial reconstructed live from public data
 with an exact-match check. Below the cliff the page states, exactly, how many
 degree-`D` polynomials still fit the revealed evaluations — `|F|^(D+1−m)`, which
 is a large finite number, not "infinitely many"; this is a finite field. Note the
@@ -92,7 +96,7 @@ points belonged to which signature.
 
 ## What Can Go Wrong
 
-- **Exceeding the budget is total, not partial.** Once the distinct revealed points reach `D+1`, anyone Lagrange-interpolates the entire secret key — there is no "slightly weaker" zone.
+- **Exceeding the budget is total, not partial.** Once the distinct revealed points reach `D+1`, anyone Lagrange-interpolates the entire secret polynomial — there is no "slightly weaker" zone in the cliff geometry. Full Jevil's forgery extractor must additionally recover the zk-WHIR commitment state.
 - **No graceful degradation.** Unlike soft-failing HORS/FORS, a few-time scheme with this cliff geometry has nothing between "safe" and "fully recovered."
 - **Misconfigured `K` and `D` blow the cap early.** The larger `K` is relative to `D`, the fewer signatures it takes to accumulate `D+1` distinct points, so a bad parameter choice exhausts the budget faster than expected.
 - **Without the commitment binding, the cliff can be dodged.** A malicious signer using an uncommitted higher-degree key escapes recovery; this repo shows that geometry but does not implement the full zk-WHIR commitment that prevents it (see `KNOWN-GAPS.md`).
