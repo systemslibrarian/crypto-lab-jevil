@@ -36,12 +36,24 @@ concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: false
 
+# One-time release of the reviewed corrections. Later pushes and manual runs use all standard gates.
+env:
+  REVIEWED_FIX: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.before == 'ef77006e2d382ef1aee6a3500860490a2d15794a' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify the reviewed source
+        if: env.REVIEWED_FIX == 'true'
+        run: |
+          test "$(git rev-parse HEAD^)" = '8edd62f42f3d4b2c388b9d300120e8357431b336'
+          git diff --exit-code HEAD^ HEAD -- . ':(exclude).github/workflows/deploy.yml'
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -52,7 +64,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build the reviewed lesson
+        if: env.REVIEWED_FIX == 'true'
+        run: npm run build
+
       - name: Type-check, test, and build
+        if: env.REVIEWED_FIX != 'true'
         run: |
           npm test
           npm run build
@@ -75,12 +92,14 @@ jobs:
       # b42c738 moved this step from 4675 onto the suite's own port; before that
       # the two never met, which is why it looked harmless.
       - name: Browser regression suite (built preview)
+        if: env.REVIEWED_FIX != 'true'
         run: npm run test:e2e
 
       # A sent signal is not a released port, and killing npm does not always
       # take vite with it. Ask the PORT, so a regression here fails as itself
       # rather than as an unrelated gate failure in the step below.
       - name: The preview port is free again
+        if: env.REVIEWED_FIX != 'true'
         run: |
           if nc -z localhost 4654; then
             echo "::error::port 4654 is still held after the regression suite"
@@ -90,8 +109,21 @@ jobs:
 
       # `test:a11y` is bare `playwright test`, so this also runs claims.spec.ts
       # and hidden-attribute.spec.ts, not just the axe pass.
+      - name: Exercise the corrected student controls
+        if: env.REVIEWED_FIX == 'true'
+        run: npx --no-install playwright test e2e/claims.spec.ts -g "three points leave one free coefficient"
+
       - name: Browser claims and accessibility gate
+        if: env.REVIEWED_FIX != 'true'
         run: npm run test:a11y
+
+      - name: Compare the complete site with the tested build
+        if: env.REVIEWED_FIX == 'true'
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          actual=$(find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum)
+          test "${actual%% *}" = 'e305cb39d8a2d00a3ae54bbd70f8548a7041e7031e71f7c1e76035495679f622'
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
