@@ -648,28 +648,28 @@ check("no panel still promises unlimited computing power cannot tell which is f"
 
 // The live status must PRINT the computed count, and that count must fall as
 // points accumulate — not a fixed word.
+const q = (1n << 64n) - (1n << 32n) + 1n;
 const countOf = async () => {
-  const m = /Exactly 2\^(\d+) degree-\d+/.exec(await page.textContent("#cliff-status"));
-  return m ? Number(m[1]) : null;
+  const status = await page.textContent("#cliff-status");
+  const m = /Exactly (\d+)\^(\d+) polynomials of degree at most (\d+)/.exec(status);
+  const meter = /(\d+)\s*\/\s*(\d+)/.exec(await page.textContent("#meter-count"));
+  if (!m || !meter) return null;
+  const free = Number(meter[2]) - Number(meter[1]);
+  check("exact count uses the field order and one free coefficient per missing point",
+    BigInt(m[1]) === q && Number(m[2]) === free && Number(m[3]) === Number(meter[2]) - 1);
+  return BigInt(m[1]) ** BigInt(m[2]);
 };
 const c0 = await countOf();
-check("below cliff the status prints a concrete candidate count", c0 !== null, String(c0));
+check("below cliff the status prints a concrete candidate count", c0 !== null);
 await page.fill("#msg", "count-shrink-probe");
 await page.click("#btn-sign");
 await page.waitForTimeout(150);
 const c1 = await countOf();
-check("the candidate count SHRINKS as distinct points accumulate",
-  c0 !== null && c1 !== null && c1 < c0, `${c0} -> ${c1}`);
-// q0 = 2^64 - 2^32 + 1 is just under 2^64, so floor(log2(q0^k)) is 64k - 1.
-// The count must therefore land on that lattice, and drop by ~64 bits per point.
-check("…and the count is floor(log2(q0^k)) = 64k-1 for an integer k",
-  c1 !== null && (c1 + 1) % 64 === 0, String(c1));
-check("…and one extra distinct point costs about one field element of freedom",
-  c0 !== null && c1 !== null && (c0 - c1) % 64 === 0 && c0 - c1 >= 64,
-  `${c0} - ${c1} = ${c0 - c1}`);
+check("the exact count shrinks as distinct points accumulate",
+  c0 !== null && c1 !== null && c1 < c0);
 await grindToCliff(page);
 check("at the cliff the status stops offering alternatives",
-  !/Exactly 2\^/.test(await page.textContent("#cliff-status")));
+  !/Exactly \d+\^/.test(await page.textContent("#cliff-status")));
 
 // The K selector must not call a single parameter a security grade.
 const keyPanel = (await page.textContent("#panel-key")).replace(/\s+/g, " ");

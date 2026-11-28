@@ -3,7 +3,7 @@
 This demo exists to make **one idea** tangible: Jevil's *catastrophic cliff*.
 From the revealed evaluations alone, fewer than `D+1` distinct points leave a
 degree-`D` polynomial **algebraically underdetermined** — with `m` distinct
-points exactly `|F|^(D+1−m)` degree-`D` polynomials fit, and those equations rank
+points exactly `|F|^(D+1−m)` polynomials of degree at most `D` fit, and those equations rank
 every one of them equally. At `D+1` that count collapses to one answer anyone can
 reconstruct. That fact is implemented for real. A working signature scheme it is
 **not**.
@@ -52,7 +52,7 @@ Scheme"*, Cryptology ePrint Archive Paper 2026/1103,
   point, and positions, all domain-separated with the paper's tags
   (`JV-SEED`, `JV-OOD`, `JV-POSN`). (`src/hash.ts`)
 - **The recovered cliff object is the polynomial.** The demo treats the
-  coefficient vector of a random degree-`D` polynomial `f`, with
+  coefficient vector of a random polynomial `f` of degree at most `D`, with
   `M = (n*+1)·K` coefficients and `D = M−1`, as its secret object. In the paper,
   `sk` is the 32-byte seed and recovering `f` alone does not produce accepted
   zk-WHIR proofs. Corollary 1 additionally uses the knowledge extractor to

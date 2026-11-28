@@ -2,8 +2,8 @@
 //
 // A degree-D polynomial is uniquely determined by D+1 distinct points. Below
 // that count the revealed evaluations do not pin it down: with m distinct points
-// out of the D+1 needed, exactly |F|^(D+1−m) degree-D polynomials fit them, and
-// from those evaluations ALONE every one is equally likely. At exactly D+1
+// out of the D+1 needed, exactly |F|^(D+1−m) polynomials of degree at most D fit them, and
+// the evaluations alone do not distinguish them. At exactly D+1
 // distinct points that count collapses to 1 and the answer is recoverable in
 // O(D²) field operations (paper Theorem 1 / Theorem 2).
 //
@@ -14,10 +14,10 @@
 //     also publishes a binding fingerprint of the coefficients and derives them
 //     from an enumerable seed. See candidateCount's note and KNOWN-GAPS.md.
 
-import type { Field } from "./ff";
+import { GF, type Field } from "./ff";
 
 /**
- * How many degree-D polynomials are consistent with `distinct` revealed
+ * How many polynomials of degree at most D are consistent with `distinct` revealed
  * evaluations. Each unused degree of freedom ranges over the whole field, so
  * the count is |F|^(D+1−distinct), and it is 1 once distinct reaches D+1.
  *
@@ -36,11 +36,10 @@ export function candidateCount<T>(F: Field<T>, D: number, distinct: number): big
   return F.size ** BigInt(freeDims);
 }
 
-/** "2^704" / "1" — a readable magnitude for a candidate count. */
-export function formatCount(n: bigint): string {
-  if (n <= 1n) return "1";
-  const bits = n.toString(2).length - 1;
-  return `2^${bits}`;
+/** Exact compact count in powers of the common Goldilocks base-field order. */
+export function formatCount<T>(field: Field<T>, freeCoefficients: number): string {
+  const exponent = field.coords * freeCoefficients;
+  return exponent === 0 ? "1" : `${GF.size}^${exponent}`;
 }
 
 export interface Point<T> {

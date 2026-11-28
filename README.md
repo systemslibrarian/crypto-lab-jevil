@@ -4,7 +4,7 @@
 
 **Jevil** is a *few-time signature* (FTS) scheme — a digital signature whose key
 is only safe to use a fixed number of times, `n*`. Its cliff target is the
-coefficient vector of a random degree-`D` polynomial `f` over the 64-bit
+coefficient vector of a random polynomial `f` of degree at most `D` over the 64-bit
 Goldilocks field; each signature reveals `K` hash-derived evaluations of `f`
 (the HORS "hash to obtain a random subset" idea), and the public key ships one
 free out-of-domain evaluation. The problem it solves is *enforcing a hard signing
@@ -51,8 +51,8 @@ cliff** — the adversarial mode that packs the public ledger with disjoint
 points as fast as possible. Watch the distinct-point meter climb and, the
 instant it reaches `D+1`, see the secret polynomial reconstructed live from public data
 with an exact-match check. Below the cliff the page states, exactly, how many
-degree-`D` polynomials still fit the revealed evaluations — `|F|^(D+1−m)`, which
-is a large finite number, not "infinitely many"; this is a finite field. Note the
+polynomials of degree at most `D` still fit the revealed evaluations — `|F|^(D+1−m)`, which
+is a finite count over the selected field. Signing the same message again with the same demo key repeats the same evaluations and leaves that count unchanged. Note the
 scope: that statement is about the *evaluation equations*. The public key also
 publishes a binding fingerprint of the coefficients, so an adversary with
 unbounded computing power can enumerate seeds and test them against it. See
